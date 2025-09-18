@@ -1,5 +1,6 @@
 const electron = require('electron');
 const { spawn } = require('child_process');
+const fs = require('fs');
 console.log('[main] process.type =', process.type);
 try {
   console.log('[main] require.resolve("electron") =', require.resolve('electron'))
@@ -55,6 +56,39 @@ ipcMain.handle('blocks:list', async () => {
 
 ipcMain.on('blocks:create', (event, block) => {
   event.sender.send('blocks:created', block);
+});
+
+// Project save/load
+ipcMain.handle('project:save', async (_event, projectData) => {
+  const defaultPath = 'project.reminderzs.json';
+  const { filePath, canceled } = await electron.dialog.showSaveDialog({
+    title: 'Save Project',
+    defaultPath,
+    filters: [{ name: 'ReminderZs Project', extensions: ['json'] }]
+  });
+  if (canceled || !filePath) return { ok: false };
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(projectData || {}, null, 2), 'utf-8');
+    return { ok: true, path: filePath };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message || e) };
+  }
+});
+
+ipcMain.handle('project:load', async () => {
+  const { filePaths, canceled } = await electron.dialog.showOpenDialog({
+    title: 'Open Project',
+    properties: ['openFile'],
+    filters: [{ name: 'ReminderZs Project', extensions: ['json'] }]
+  });
+  if (canceled || !filePaths || !filePaths[0]) return { ok: false };
+  try {
+    const content = fs.readFileSync(filePaths[0], 'utf-8');
+    const data = JSON.parse(content);
+    return { ok: true, path: filePaths[0], data };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message || e) };
+  }
 });
 
 // Track the currently running backend Python process (for generate)

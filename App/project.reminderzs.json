@@ -1,0 +1,458 @@
+{
+  "blocks": [
+    {
+      "id": "BeginPlay",
+      "uid": "9e62ff7f-3cf7-4e02-ab0d-c419e18e5da6",
+      "content": "Begin Play",
+      "button_class": "Executor",
+      "has_input_executor": false,
+      "has_output_executor": true,
+      "exec_input_nodes": [],
+      "exec_output_nodes": [
+        "out"
+      ],
+      "variables_input_nodes": [],
+      "variables_input_nodes_types": [],
+      "variables_output_nodes": [],
+      "variables_output_nodes_types": [],
+      "in_connection_id": null,
+      "out_connection_id": null,
+      "exec_out_refs": {
+        "out": "d2a45925-6083-4164-a055-618fb1fa2087"
+      },
+      "exec_in_refs": {},
+      "variables_input_references": [],
+      "variables_output_references": [],
+      "function_name": null,
+      "extra_context_string": null,
+      "position": {
+        "x": 40,
+        "y": 40
+      }
+    },
+    {
+      "id": "builtins.print",
+      "uid": "6a2eed39-db9b-4e7f-bf7f-8c9dc876f03a",
+      "content": "Print value",
+      "button_class": "Function",
+      "has_input_executor": true,
+      "has_output_executor": true,
+      "exec_input_nodes": [
+        "in"
+      ],
+      "exec_output_nodes": [
+        "out"
+      ],
+      "variables_input_nodes": [
+        "value"
+      ],
+      "variables_input_nodes_types": [
+        "any"
+      ],
+      "variables_output_nodes": [],
+      "variables_output_nodes_types": [],
+      "in_connection_id": null,
+      "out_connection_id": null,
+      "exec_out_refs": {},
+      "exec_in_refs": {
+        "then": "d2a45925-6083-4164-a055-618fb1fa2087"
+      },
+      "variables_input_references": [
+        "7adca1ec-08f5-4940-8d62-919256d65bca"
+      ],
+      "variables_output_references": [],
+      "function_name": "builtins.print",
+      "extra_context_string": null,
+      "position": {
+        "x": 762,
+        "y": 45
+      }
+    },
+    {
+      "id": "Variable",
+      "uid": "613f4528-f709-4ebf-86bf-122a4d3943ce",
+      "content": "Variable var1",
+      "button_class": "Variable",
+      "has_input_executor": false,
+      "has_output_executor": false,
+      "exec_input_nodes": [],
+      "exec_output_nodes": [],
+      "variables_input_nodes": [],
+      "variables_input_nodes_types": [],
+      "variables_output_nodes": [
+        "value"
+      ],
+      "variables_output_nodes_types": [
+        "any"
+      ],
+      "in_connection_id": null,
+      "out_connection_id": null,
+      "exec_out_refs": {},
+      "exec_in_refs": {},
+      "variables_input_references": [],
+      "variables_output_references": [
+        [
+          "6a2eed39-db9b-4e7f-bf7f-8c9dc876f03a:in:0"
+        ]
+      ],
+      "function_name": null,
+      "extra_context_string": null,
+      "position": {
+        "x": 47,
+        "y": 222
+      },
+      "variable": {
+        "name": "cow",
+        "type": "any",
+        "value": "555",
+        "uid": "7adca1ec-08f5-4940-8d62-919256d65bca",
+        "is_global": false,
+        "global_id": null,
+        "local_id": null
+      },
+      "variable_uid": "7adca1ec-08f5-4940-8d62-919256d65bca"
+    },
+    {
+      "id": "flow_if",
+      "uid": "d2a45925-6083-4164-a055-618fb1fa2087",
+      "content": "If condition",
+      "button_class": "Conditional",
+      "has_input_executor": true,
+      "has_output_executor": true,
+      "exec_input_nodes": [
+        "in"
+      ],
+      "exec_output_nodes": [
+        "then",
+        "else"
+      ],
+      "variables_input_nodes": [
+        "condition"
+      ],
+      "variables_input_nodes_types": [
+        "bool"
+      ],
+      "variables_output_nodes": [],
+      "variables_output_nodes_types": [],
+      "in_connection_id": null,
+      "out_connection_id": null,
+      "exec_out_refs": {
+        "then": "6a2eed39-db9b-4e7f-bf7f-8c9dc876f03a",
+        "else": "ea6871fa-0c07-4e5b-898c-2acde5960859"
+      },
+      "exec_in_refs": {
+        "out": "9e62ff7f-3cf7-4e02-ab0d-c419e18e5da6"
+      },
+      "variables_input_references": [
+        "dbc0d20a-0bef-4bdd-9551-b8a3ed038b26"
+      ],
+      "variables_output_references": [],
+      "function_name": "flow_if",
+      "extra_context_string": null,
+      "position": {
+        "x": 399,
+        "y": 49
+      }
+    },
+    {
+      "id": "builtins.print",
+      "uid": "ea6871fa-0c07-4e5b-898c-2acde5960859",
+      "content": "Print value",
+      "button_class": "Function",
+      "has_input_executor": true,
+      "has_output_executor": true,
+      "exec_input_nodes": [
+        "in"
+      ],
+      "exec_output_nodes": [
+        "out"
+      ],
+      "variables_input_nodes": [
+        "value"
+      ],
+      "variables_input_nodes_types": [
+        "any"
+      ],
+      "variables_output_nodes": [],
+      "variables_output_nodes_types": [],
+      "in_connection_id": null,
+      "out_connection_id": null,
+      "exec_out_refs": {
+        "out": "e90fd469-40b0-4a74-a30e-129ebecbe955"
+      },
+      "exec_in_refs": {
+        "else": "d2a45925-6083-4164-a055-618fb1fa2087"
+      },
+      "variables_input_references": [
+        "d8d1f839-d570-44f1-9cd5-8f4cc7d781dd"
+      ],
+      "variables_output_references": [],
+      "function_name": "builtins.print",
+      "extra_context_string": null,
+      "position": {
+        "x": 765,
+        "y": 163
+      }
+    },
+    {
+      "id": "Variable",
+      "uid": "187eac4c-90ff-4963-9465-c6208eaedd3a",
+      "content": "Variable var2",
+      "button_class": "Variable",
+      "has_input_executor": false,
+      "has_output_executor": false,
+      "exec_input_nodes": [],
+      "exec_output_nodes": [],
+      "variables_input_nodes": [],
+      "variables_input_nodes_types": [],
+      "variables_output_nodes": [
+        "value"
+      ],
+      "variables_output_nodes_types": [
+        "any"
+      ],
+      "in_connection_id": null,
+      "out_connection_id": null,
+      "exec_out_refs": {},
+      "exec_in_refs": {},
+      "variables_input_references": [],
+      "variables_output_references": [
+        [
+          "ea6871fa-0c07-4e5b-898c-2acde5960859:in:0"
+        ]
+      ],
+      "function_name": null,
+      "extra_context_string": null,
+      "position": {
+        "x": 47,
+        "y": 360
+      },
+      "variable": {
+        "name": "false",
+        "type": "any",
+        "value": "cfawf",
+        "uid": "d8d1f839-d570-44f1-9cd5-8f4cc7d781dd",
+        "is_global": false,
+        "global_id": null,
+        "local_id": null
+      },
+      "variable_uid": "d8d1f839-d570-44f1-9cd5-8f4cc7d781dd"
+    },
+    {
+      "id": "Variable",
+      "uid": "90159fac-f5ae-4924-b8dd-1fa4945301bf",
+      "content": "Variable var3",
+      "button_class": "Variable",
+      "has_input_executor": false,
+      "has_output_executor": false,
+      "exec_input_nodes": [],
+      "exec_output_nodes": [],
+      "variables_input_nodes": [],
+      "variables_input_nodes_types": [],
+      "variables_output_nodes": [
+        "value"
+      ],
+      "variables_output_nodes_types": [
+        "any"
+      ],
+      "in_connection_id": null,
+      "out_connection_id": null,
+      "exec_out_refs": {},
+      "exec_in_refs": {},
+      "variables_input_references": [],
+      "variables_output_references": [
+        [
+          "d2a45925-6083-4164-a055-618fb1fa2087:in:0"
+        ]
+      ],
+      "function_name": null,
+      "extra_context_string": null,
+      "position": {
+        "x": 40,
+        "y": -142
+      },
+      "variable": {
+        "name": "boollll",
+        "type": "bool",
+        "value": "1",
+        "uid": "dbc0d20a-0bef-4bdd-9551-b8a3ed038b26",
+        "is_global": false,
+        "global_id": null,
+        "local_id": null
+      },
+      "variable_uid": "dbc0d20a-0bef-4bdd-9551-b8a3ed038b26"
+    },
+    {
+      "id": "math_functions.multiply",
+      "uid": "e90fd469-40b0-4a74-a30e-129ebecbe955",
+      "content": "Multiply two integers.",
+      "button_class": "Function",
+      "has_input_executor": true,
+      "has_output_executor": true,
+      "exec_input_nodes": [
+        "in"
+      ],
+      "exec_output_nodes": [
+        "out"
+      ],
+      "variables_input_nodes": [
+        "a",
+        "b"
+      ],
+      "variables_input_nodes_types": [
+        "int",
+        "int"
+      ],
+      "variables_output_nodes": [
+        "result"
+      ],
+      "variables_output_nodes_types": [
+        "int"
+      ],
+      "in_connection_id": null,
+      "out_connection_id": null,
+      "exec_out_refs": {
+        "out": "a8b286b8-f302-4079-8eeb-1b83ce277acf"
+      },
+      "exec_in_refs": {
+        "out": "ea6871fa-0c07-4e5b-898c-2acde5960859"
+      },
+      "variables_input_references": [
+        "0a455754-6d20-409d-b839-2816e742a4ef",
+        "0a455754-6d20-409d-b839-2816e742a4ef"
+      ],
+      "variables_output_references": [
+        [
+          "a8b286b8-f302-4079-8eeb-1b83ce277acf:in:0"
+        ]
+      ],
+      "function_name": "math_functions.multiply",
+      "extra_context_string": null,
+      "position": {
+        "x": 1086,
+        "y": 150
+      }
+    },
+    {
+      "id": "Variable",
+      "uid": "3a08ac20-9f3c-40e7-9164-2bcc3f5b6fde",
+      "content": "Variable var4",
+      "button_class": "Variable",
+      "has_input_executor": false,
+      "has_output_executor": false,
+      "exec_input_nodes": [],
+      "exec_output_nodes": [],
+      "variables_input_nodes": [],
+      "variables_input_nodes_types": [],
+      "variables_output_nodes": [
+        "value"
+      ],
+      "variables_output_nodes_types": [
+        "any"
+      ],
+      "in_connection_id": null,
+      "out_connection_id": null,
+      "exec_out_refs": {},
+      "exec_in_refs": {},
+      "variables_input_references": [],
+      "variables_output_references": [
+        [
+          "e90fd469-40b0-4a74-a30e-129ebecbe955:in:0",
+          "e90fd469-40b0-4a74-a30e-129ebecbe955:in:1"
+        ]
+      ],
+      "function_name": null,
+      "extra_context_string": null,
+      "position": {
+        "x": 769,
+        "y": 294
+      },
+      "variable": {
+        "name": "var4",
+        "type": "any",
+        "value": "44",
+        "uid": "0a455754-6d20-409d-b839-2816e742a4ef",
+        "is_global": false,
+        "global_id": null,
+        "local_id": null
+      },
+      "variable_uid": "0a455754-6d20-409d-b839-2816e742a4ef"
+    },
+    {
+      "id": "builtins.print",
+      "uid": "a8b286b8-f302-4079-8eeb-1b83ce277acf",
+      "content": "Print value",
+      "button_class": "Function",
+      "has_input_executor": true,
+      "has_output_executor": true,
+      "exec_input_nodes": [
+        "in"
+      ],
+      "exec_output_nodes": [
+        "out"
+      ],
+      "variables_input_nodes": [
+        "value"
+      ],
+      "variables_input_nodes_types": [
+        "any"
+      ],
+      "variables_output_nodes": [],
+      "variables_output_nodes_types": [],
+      "in_connection_id": null,
+      "out_connection_id": null,
+      "exec_out_refs": {},
+      "exec_in_refs": {
+        "out": "e90fd469-40b0-4a74-a30e-129ebecbe955"
+      },
+      "variables_input_references": [
+        "e90fd469-40b0-4a74-a30e-129ebecbe955:out:0"
+      ],
+      "variables_output_references": [],
+      "function_name": "builtins.print",
+      "extra_context_string": null,
+      "position": {
+        "x": 1479,
+        "y": 152
+      }
+    }
+  ],
+  "variables": [
+    {
+      "name": "cow",
+      "type": "any",
+      "value": "555",
+      "uid": "7adca1ec-08f5-4940-8d62-919256d65bca",
+      "is_global": false,
+      "global_id": null,
+      "local_id": null
+    },
+    {
+      "name": "false",
+      "type": "any",
+      "value": "cfawf",
+      "uid": "d8d1f839-d570-44f1-9cd5-8f4cc7d781dd",
+      "is_global": false,
+      "global_id": null,
+      "local_id": null
+    },
+    {
+      "name": "boollll",
+      "type": "bool",
+      "value": "1",
+      "uid": "dbc0d20a-0bef-4bdd-9551-b8a3ed038b26",
+      "is_global": false,
+      "global_id": null,
+      "local_id": null
+    },
+    {
+      "name": "var4",
+      "type": "any",
+      "value": "44",
+      "uid": "0a455754-6d20-409d-b839-2816e742a4ef",
+      "is_global": false,
+      "global_id": null,
+      "local_id": null
+    }
+  ]
+}

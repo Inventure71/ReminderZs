@@ -378,6 +378,8 @@
     const debugPython = qs('#debug-python')
     const varsList = qs('#variables-list')
     const addVarBtn = qs('#add-var')
+    const saveBtn = qs('#save-project')
+    const loadBtn = qs('#load-project')
     const inspector = qs('#inspector')
     const inspectorContent = qs('#inspector-content')
 
@@ -570,6 +572,158 @@
       Variables.list.push({ name: 'var' + (Variables.list.length + 1), type: 'any', value: '', uid, is_global: false, global_id: null, local_id: null })
       Store.variables.set(uid, Variables.list[Variables.list.length - 1])
       renderVariables()
+    })
+
+    // Save/Load project
+    function serializeProject() {
+      // We want raw graph, not filtered by BeginPlay; reconstruct from Store
+      const all = []
+      Store.blocks.forEach(({ uid, data, el }) => {
+        // Re-run exporter piece per block to get full JSON schema
+        const py = {
+          id: data.id,
+          uid: uid,
+          content: data.content || '',
+          button_class: data.button_class || null,
+          has_input_executor: Boolean(data.has_input_executor),
+          has_output_executor: Boolean(data.has_output_executor),
+          exec_input_nodes: Array.isArray(data.exec_input_nodes) ? data.exec_input_nodes : [],
+          exec_output_nodes: Array.isArray(data.exec_output_nodes) ? data.exec_output_nodes : [],
+          variables_input_nodes: Array.isArray(data.variables_input_nodes) ? data.variables_input_nodes : [],
+          variables_input_nodes_types: Array.isArray(data.variables_input_nodes_types) ? data.variables_input_nodes_types : [],
+          variables_output_nodes: Array.isArray(data.variables_output_nodes) ? data.variables_output_nodes : [],
+          variables_output_nodes_types: Array.isArray(data.variables_output_nodes_types) ? data.variables_output_nodes_types : [],
+          in_connection_id: null,
+          out_connection_id: null,
+          exec_out_refs: {},
+          exec_in_refs: {},
+          variables_input_references: [],
+          variables_output_references: [],
+          function_name: data.function_name || null,
+          extra_context_string: data.extra_context_string || null,
+          position: undefined
+        }
+        // position
+        const leftPx = parseFloat(el.style.left || '0') || 0
+        const topPx = parseFloat(el.style.top || '0') || 0
+        py.position = { x: Math.round(leftPx), y: Math.round(topPx) }
+        for (const [k, v] of Store.exec.entries()) {
+          const [fromUid, outKey] = k.split(':exec:')
+          if (fromUid === uid && v) py.exec_out_refs[outKey] = v.toUid
+          if (v && v.toUid === uid) py.exec_in_refs[outKey] = fromUid
+        }
+        const inputCount = py.variables_input_nodes.length
+        for (let i = 0; i < inputCount; i++) {
+          let ref = null
+          for (const [k, setRef] of Store.vars.entries()) {
+            for (const v of setRef) {
+              if (v.toUid === uid && v.inIndex === i) {
+                const [fromUid] = k.split(':out:')
+                const src = Store.blocks.get(fromUid)
+                if (src && (src.data.button_class || '').toLowerCase() === 'variable') {
+                  ref = src.data.variable_uid || src.uid
+                } else {
+                  ref = k
+                }
+                break
+              }
+            }
+            if (ref) break
+          }
+          py.variables_input_references.push(ref)
+        }
+        const outputCount = py.variables_output_nodes.length
+        for (let o = 0; o < outputCount; o++) {
+          const key = `${uid}:out:${o}`
+          const setRef = Store.vars.get(key)
+          if (!setRef || setRef.size === 0) { py.variables_output_references.push(null); continue }
+          const outTargets = []
+          for (const v of setRef) {
+            const target = Store.blocks.get(v.toUid)
+            if (target && (target.data.button_class || '').toLowerCase() === 'variable') {
+              outTargets.push(target.data.variable_uid || target.uid)
+            } else {
+              outTargets.push(`${v.toUid}:in:${v.inIndex}`)
+            }
+          }
+          py.variables_output_references.push(outTargets)
+        }
+        if ((data.button_class || '').toLowerCase() === 'variable') {
+          const vinfo = data.variable_uid && Store.variables.get(data.variable_uid)
+          if (vinfo) {
+            py.variable = { ...vinfo }
+            py.variable_uid = vinfo.uid
+          } else {
+            py.variable_uid = data.variable_uid || null
+          }
+        }
+        all.push(py)
+      })
+      return { blocks: all, variables: Array.from(Store.variables.values()) }
+    }
+
+    saveBtn.addEventListener('click', async () => {
+      if (!(window.blocksApi && window.blocksApi.backend && window.blocksApi.backend.saveProject)) return
+      const proj = serializeProject()
+      const res = await window.blocksApi.backend.saveProject(proj)
+      if (!res || !res.ok) console.error('Save failed', res)
+    })
+
+    loadBtn.addEventListener('click', async () => {
+      if (!(window.blocksApi && window.blocksApi.backend && window.blocksApi.backend.loadProject)) return
+      const res = await window.blocksApi.backend.loadProject()
+      if (!res || !res.ok || !res.data) return
+      // Clear current canvas
+      const blocksToRemove = Array.from(Store.blocks.keys())
+      blocksToRemove.forEach((uid) => removeConnectionsForBlock(uid))
+      Store.blocks.clear()
+      const contentChildren = Array.from(content.children)
+      contentChildren.forEach((el) => { if (el.classList && el.classList.contains('block')) el.remove() })
+      // Restore variables map and list UI
+      Store.variables.clear()
+      Variables.list = Array.isArray(res.data.variables) ? res.data.variables.slice() : []
+      Variables.list.forEach((v) => { if (v && v.uid) Store.variables.set(v.uid, v) })
+      renderVariables()
+      // Recreate blocks
+      const byUid = new Map()
+      ;(res.data.blocks || []).forEach((b) => {
+        const view = new window.BlockView(b)
+        // apply saved position
+        if (b.position && typeof b.position.x === 'number' && typeof b.position.y === 'number') {
+          view.el.style.left = b.position.x + 'px'
+          view.el.style.top = b.position.y + 'px'
+        }
+        content.appendChild(view.el)
+        addBlockToStore(view.data.uid, view.el, view.data)
+        wireBlockEvents(view.el, canvas)
+        byUid.set(b.uid, view)
+      })
+      // Recreate connections
+      ;(res.data.blocks || []).forEach((b) => {
+        const uid = b.uid
+        const execOut = b.exec_out_refs || {}
+        Object.keys(execOut).forEach((k) => {
+          Store.exec.set(`${uid}:exec:${k}`, { toUid: execOut[k] })
+        })
+        const outCount = (b.variables_output_nodes || []).length
+        for (let o = 0; o < outCount; o++) {
+          const refs = (b.variables_output_references || [])[o]
+          if (!refs) continue
+          const key = `${uid}:out:${o}`
+          if (!Store.vars.has(key)) Store.vars.set(key, new Set())
+          const setRef = Store.vars.get(key)
+          ;(Array.isArray(refs) ? refs : [refs]).forEach((r) => {
+            if (typeof r !== 'string') return
+            if (r.includes(':in:')) {
+              const [toUid, , inIndexStr] = r.split(':')
+              setRef.add({ toUid, inIndex: Number(inIndexStr) || 0 })
+            } else {
+              // variable UID target (rare), ignore in reconstruction of edges
+            }
+          })
+        }
+      })
+      drawConnections(canvas)
     })
 
     // Allow dropping variable onto canvas to create a Variable block bound to that variable uid

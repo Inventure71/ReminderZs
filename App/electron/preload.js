@@ -24,6 +24,12 @@ contextBridge.exposeInMainWorld('blocksApi', {
         console.error('backend:generate failed', err)
         return { code: -1, stdout: '', stderr: String(err && err.message || err) }
       }
+    },
+    saveProject: async (projectData) => {
+      try { return await ipcRenderer.invoke('project:save', projectData) } catch (e) { return { ok: false, error: String(e) } }
+    },
+    loadProject: async () => {
+      try { return await ipcRenderer.invoke('project:load') } catch (e) { return { ok: false, error: String(e) } }
     }
   },
   onCreated: (callback) => {

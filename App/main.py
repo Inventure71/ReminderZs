@@ -1,4 +1,4 @@
-import sys, json, os
+import sys, json, os, re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -33,6 +33,24 @@ if __name__ == "__main__":
         return s
 
     def py_literal(v: Any) -> str:
+        # Prefer numeric literals when the value is a numeric-looking string
+        if isinstance(v, str):
+            s = v.strip()
+            if s:
+                # integer
+                if re.fullmatch(r"[+-]?\d+", s):
+                    try:
+                        return str(int(s))
+                    except Exception:
+                        return repr(v)
+                # float / scientific
+                if re.fullmatch(r"[+-]?(?:\d+\.\d*|\d*\.\d+)(?:[eE][+-]?\d+)?", s) or re.fullmatch(r"[+-]?\d+[eE][+-]?\d+", s):
+                    try:
+                        f = float(s)
+                        return repr(f)
+                    except Exception:
+                        return repr(v)
+            return repr(v)
         return repr(v)
 
     # Index blocks by uid
@@ -45,6 +63,7 @@ if __name__ == "__main__":
 
     for b in blocks:
         if (b.get('button_class') or '').lower() == 'variable':
+            # Prefer variable info from JSON; fallback to catalog if needed
             vinfo = b.get('variable') or {}
             base = sanitize_ident(vinfo.get('name') or 'var')
             sym = base
@@ -54,7 +73,7 @@ if __name__ == "__main__":
                 i += 1
             used_symbols.add(sym)
             var_block_uid = b.get('uid')
-            var_value_uid = vinfo.get('uid')
+            var_value_uid = vinfo.get('uid') or b.get('variable_uid')
             # Map both the block uid and the variable uid to the same symbol
             if var_block_uid:
                 var_uid_to_symbol[var_block_uid] = sym
