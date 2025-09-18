@@ -21,12 +21,10 @@ Each block emitted by the UI must include these fields:
     - variable UID (from a `Variable` block)
     - upstream output spec: "<fromUid>:out:<index>" (index is the numeric output slot)
     - null when unconnected
-- variables_output_references: (string[] | null)[] – ordered list; one entry per variable output
+- variables_output_references: (string[] | null)[] – ordered list; one entry per variable output (fan‑out allowed)
   - For each output index:
     - null when unconnected
-    - otherwise an array of references for all targets connected to this output, where a value is:
-      - target variable UID, or
-      - target port spec: "<toUid>:in:<index>"
+    - otherwise an array of references for all targets connected to this output, where a value is a target port spec "<toUid>:in:<index>" (or a variable UID in edge cases)
 - exec_out_refs: { [outKey: string]: toUid } – execution edges for each exec output key
 - exec_in_refs: { [inKey: string]: fromUid } – reverse mapping (optional; informational)
 - function_name: string | null – fully qualified function name for `Function` blocks (e.g., "package.module.func" or "builtins.print")
@@ -65,7 +63,7 @@ For outputs: one entry per output. Each entry is null or an array of target refs
   - exec_input_nodes = [], exec_output_nodes = []
   - Exactly one variable output (named "value"), no inputs
   - `variable_uid` attached to the block; `variable` object contains default, name, type
-  - Variable outputs MAY connect to multiple targets (fan-out)
+  - Variable outputs MAY connect to multiple targets (fan‑out). Variable inputs accept a single incoming connection.
 
 - Function
   - exec_input_nodes typically ["in"], exec_output_nodes typically ["out"]
@@ -79,6 +77,12 @@ For outputs: one entry per output. Each entry is null or an array of target refs
 - Executor
   - Used for flow control
   - A special `BeginPlay` Executor is always present; compile considers only blocks reachable from it
+
+Connection cardinality:
+- Exec outputs: max 1 active connection per output key
+- Exec inputs: max 1 incoming connection
+- Variable outputs: unlimited fan‑out
+- Variable inputs: max 1 incoming connection
 
 ### 3) Connections
 - Exec connections are keyed by node label (from `exec_output_nodes`), stored in `exec_out_refs` as `key → toUid`.
@@ -118,13 +122,16 @@ For outputs: one entry per output. Each entry is null or an array of target refs
   1) Build a map of variables (UID → symbol), emit top-level variable declarations with defaults (and type hints)
   2) Walk the execution graph from `BeginPlay` following `exec_out_refs` in order. When encountering a `Conditional`, generate `if/else` and recursively traverse both branches
   3) For each `Function` block, resolve inputs from `variables_input_references` in order:
-     - variable UID → variable symbol
-     - upstream output ref `fromUid:out:index` → symbol produced by that function output
+     - variable UID → variable symbol (cast to expected input type if annotated as str | int | float | bool)
+     - upstream output ref `fromUid:out:index` → symbol produced by that function output (no casting applied)
      - null → `None`
   4) Emit imports for `modules.<pkg>.<func>`; call `builtins.<name>` directly
   5) Emit assignment for outputs, one symbol per output in order
   6) For custom functions without a known module, create a stub file under `App/modules/<name>.py` containing the block metadata
 - Only blocks reachable (directly or indirectly) from `BeginPlay` are included. Variable-only sources feeding included blocks are also included.
+
+Variable defaults:
+- If a variable’s default value is a numeric‑looking string (integer/float/scientific), it is emitted as a numeric literal instead of a quoted string.
 
 ### 9) UIDs & References
 - Every block has a unique `uid`
@@ -138,5 +145,11 @@ For outputs: one entry per output. Each entry is null or an array of target refs
 ### 11) Naming & Style
 - Inputs/outputs listed in `variables_*_nodes` must be reflected 1:1 in their corresponding reference arrays (maintain order, use nulls for gaps)
 - Exec ports are configured by `exec_input_nodes`/`exec_output_nodes`; only `Conditional` is allowed to have two exec outputs by default, but the model supports N exec ports generically
+
+### 12) Save/Load Projects
+- Save writes JSON containing:
+  - blocks: full graph with positions `{ position: { x, y } }`, all refs, function_name, and for Variable blocks the `variable` object and `variable_uid`
+  - variables: sidebar variable catalog (name, type, value, uid, global/local flags)
+- Load clears the canvas, restores variables in the sidebar, recreates all blocks at saved positions, rebinds exec and variable edges, then redraws connections.
 
 
