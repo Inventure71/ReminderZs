@@ -76,6 +76,33 @@ if __name__ == "__main__":
     imports: Set[str] = set()
     stub_tasks: List[Tuple[str, Dict[str, Any]]] = []  # (func_name, block)
 
+    def canonical_type(tname: Optional[str]) -> Optional[str]:
+        if not tname:
+            return None
+        name = str(tname).strip().lower()
+        if name in ('string', 'str', 'text'):
+            return 'str'
+        if name in ('int', 'integer'):
+            return 'int'
+        if name in ('float', 'double', 'number'):
+            return 'float'
+        if name in ('bool', 'boolean'):
+            return 'bool'
+        return None
+
+    def cast_expr(expr: str, expected: Optional[str]) -> str:
+        if expr == 'None' or not expected:
+            return expr
+        if expected == 'str':
+            return f"str({expr})"
+        if expected == 'int':
+            return f"int({expr})"
+        if expected == 'float':
+            return f"float({expr})"
+        if expected == 'bool':
+            return f"bool({expr})"
+        return expr
+
     def resolve_input_expr(block: Dict[str, Any], idx: int) -> str:
         # Enforced ordering from UI: one entry per input, either variable UID, "fromUid:out:index", or null
         refs = block.get('variables_input_references') or []
@@ -107,11 +134,20 @@ if __name__ == "__main__":
         if (block.get('button_class') or '').lower() != 'function':
             return None
         fn = block.get('function_name')
-        # Build argument list from input variables
+        # Build argument list from input variables (attempt basic casting for variables to expected input types)
         inputs = block.get('variables_input_nodes') or []
+        input_types = block.get('variables_input_nodes_types') or []
+        refs = block.get('variables_input_references') or []
         args_list: List[str] = []
         for i, _ in enumerate(inputs):
-            args_list.append(resolve_input_expr(block, i))
+            raw = resolve_input_expr(block, i)
+            expected = canonical_type(input_types[i] if i < len(input_types) else None)
+            ref_val = refs[i] if i < len(refs) else None
+            # Cast only when the source is a variable UID (no ':out:' in ref)
+            if isinstance(ref_val, str) and (':out:' not in ref_val):
+                args_list.append(cast_expr(raw, expected))
+            else:
+                args_list.append(raw)
         args = ', '.join(args_list)
         # Determine outputs
         outs = block.get('variables_output_nodes') or []
