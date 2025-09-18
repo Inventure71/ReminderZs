@@ -9,6 +9,8 @@ body{ margin:0; background:var(--bg); color:var(--text); font:14px/1.4 -apple-sy
 
 .content{ display:flex; height:100% }
 .sidebar{ width:320px; border-right:1px solid var(--border); background:var(--panel); padding:12px; overflow:auto }
+.library h2{ margin:6px 0 8px 0; font-size:14px }
+.library h3{ margin:8px 0 6px 0; font-size:12px; color:var(--muted) }
 .palette{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:8px; margin-bottom:12px }
 .palette .pal-item{ padding:8px; border:1px solid var(--border); border-radius:8px; background:#151a2a; text-align:center; cursor:pointer; font-size:12px }
 .palette .pal-item.executor{ background:rgba(122,162,247,0.15) }
@@ -16,7 +18,13 @@ body{ margin:0; background:var(--bg); color:var(--text); font:14px/1.4 -apple-sy
 .palette .pal-item.variable{ background:rgba(238,212,159,0.15) }
 .palette .pal-item.conditional{ background:rgba(198,160,246,0.15) }
 .canvas-wrap{ flex:1; position:relative }
-.canvas{ position:absolute; inset:0; background:linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px) 0 0/16px 16px, linear-gradient(0deg, rgba(255,255,255,0.03) 1px, transparent 1px) 0 0/16px 16px }
+.canvas{ position:absolute; inset:0; overflow:hidden; background:linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px) 0 0/16px 16px, linear-gradient(0deg, rgba(255,255,255,0.03) 1px, transparent 1px) 0 0/16px 16px; cursor: grab }
+.canvas.panning{ cursor: grabbing }
+.canvas-content{ position:absolute; left:0; top:0; transform-origin: 0 0; }
+.inspector{ position:absolute; top:0; right:0; width:300px; height:100%; background:rgba(22,25,37,0.95); border-left:1px solid var(--border); padding:12px; overflow:auto }
+.inspector h2{ margin:6px 0 10px 0; font-size:14px }
+.inspector-content label{ display:block; margin:8px 0; font-size:12px; color:var(--muted) }
+.inspector-content input{ width:100%; padding:8px; background:#0d0f14; border:1px solid var(--border); color:var(--text); border-radius:6px; margin-top:4px }
 .conn-layer path{ pointer-events:none }
 .compile-bar{ position:absolute; right:12px; bottom:12px; display:flex; gap:8px; align-items:flex-start }
 .compile-output{ background:#0d0f14; border:1px solid var(--border); color:var(--muted); padding:8px; border-radius:6px; max-width:480px; max-height:240px; overflow:auto; min-width:240px }
@@ -26,10 +34,14 @@ label{ display:block; margin-bottom:8px; color:var(--muted); font-size:12px }
 label input, label select{ width:100%; margin-top:4px; padding:8px; background:#0d0f14; border:1px solid var(--border); color:var(--text); border-radius:6px }
 .row{ display:flex; gap:12px; margin:8px 0 }
 .checkbox{ display:flex; align-items:center; gap:6px; margin:0 }
+.compile-bar .checkbox{ color:var(--muted) }
 
 .vars-group{ margin:10px 0 }
 .vars-group h3{ margin:8px 0; font-size:12px; color:var(--muted) }
 .vars-list{ display:flex; flex-direction:column; gap:6px }
+.vars-list .var-item{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 8px; background:#151a2a; border:1px solid var(--border); border-radius:8px; cursor:pointer }
+.vars-list .var-item .name{ font-weight:600 }
+.vars-list .var-item .type{ font-size:12px; color:var(--muted) }
 .var-row{ display:flex; gap:6px }
 .var-row input{ flex:1 }
 .var-row .remove{ width:36px; border-radius:6px; border:1px solid var(--border); background:#1a1f2e; color:var(--muted) }
@@ -42,7 +54,9 @@ button:hover{ filter:brightness(1.1) }
 .block{ position:absolute; min-width:220px; max-width:320px; background:#111524; border:1px solid var(--border); border-radius:10px; box-shadow:0 4px 14px rgba(0,0,0,0.4); user-select:none }
 .block-header{ display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid var(--border); gap:8px }
 .block-title{ font-weight:600 }
-.block-uid{ margin-left:auto; font-size:10px; color:var(--muted) }
+.block-right{ display:flex; gap:8px; align-items:center }
+.block-uid{ font-size:10px; color:var(--muted) }
+.block-del{ width:22px; height:22px; border-radius:6px; border:1px solid var(--border); background:#1a1f2e; color:var(--muted); cursor:pointer }
 .badge{ font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); color:var(--muted) }
 .badge.executor{ color:#fff; background:var(--accent) }
 .badge.function{ color:#141414; background:var(--green) }
@@ -65,6 +79,8 @@ button:hover{ filter:brightness(1.1) }
 .exec{ position:absolute; width:14px; height:14px; border-radius:50%; background:var(--red); border:2px solid rgba(0,0,0,0.4) }
 .exec.in{ left:-7px; top:-7px }
 .exec.out{ right:-7px; top:-7px }
+.exec.out[data-branch="then"]{ right:32px }
+.exec.out[data-branch="else"]{ right:-7px }
 .block-ports.inputs{ padding-top:10px }
 .block-ports.outputs{ padding-top:10px }
 .exec.connecting{ outline:2px dashed var(--red) }

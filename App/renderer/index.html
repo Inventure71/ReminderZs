@@ -13,64 +13,28 @@
       </header>
       <main class="content">
         <section class="sidebar">
-          <div id="block-palette" class="palette"></div>
-          <form id="block-form" autocomplete="off">
-            <h2>Create Block</h2>
-            <label>
-              ID (type)
-              <input name="id" type="text" placeholder="Function/Variable/Custom">
-            </label>
-            <label>
-              Content
-              <input name="content" type="text" placeholder="Some content">
-            </label>
-            <label>
-              Function Name (optional)
-              <input name="function_name" type="text" placeholder="my_function">
-            </label>
-            <label>
-              Extra Context (optional)
-              <input name="extra_context_string" type="text" placeholder="notes...">
-            </label>
-            <label>
-              Class
-              <select name="button_class">
-                <option value="">(none)</option>
-                <option>Executor</option>
-                <option>Function</option>
-                <option>Variable</option>
-                <option>Conditional</option>
-              </select>
-            </label>
+          <div class="library">
+            <h2>Blocks</h2>
+            <div id="builtin-list" class="palette"></div>
+            <h3>Discovered from /modules</h3>
+            <div id="discovered-list" class="palette"></div>
+            <h2>Variables</h2>
+            <div id="variables-list" class="vars-list"></div>
             <div class="row">
-              <label class="checkbox">
-                <input name="has_input_executor" type="checkbox"> Input Executor
-              </label>
-              <label class="checkbox">
-                <input name="has_output_executor" type="checkbox"> Output Executor
-              </label>
+              <button id="add-var" type="button">Add Variable</button>
             </div>
-
-            <div class="vars-group">
-              <h3>Input Variables</h3>
-              <div id="inputs-list" class="vars-list"></div>
-              <button type="button" id="add-input-var">Add input</button>
-            </div>
-
-            <div class="vars-group">
-              <h3>Output Variables</h3>
-              <div id="outputs-list" class="vars-list"></div>
-              <button type="button" id="add-output-var">Add output</button>
-            </div>
-
-            <div class="actions">
-              <button type="submit">Create Block</button>
-            </div>
-          </form>
+          </div>
         </section>
         <section class="canvas-wrap">
-          <div id="canvas" class="canvas" aria-label="Block canvas"></div>
+          <div id="canvas" class="canvas" aria-label="Block canvas">
+            <div id="canvas-content" class="canvas-content"></div>
+          </div>
+          <aside class="inspector" id="inspector">
+            <h2>Inspector</h2>
+            <div id="inspector-content" class="inspector-content">Select a variable to edit</div>
+          </aside>
           <div class="compile-bar">
+            <label class="checkbox"><input type="checkbox" id="debug-python"> Debug Python</label>
             <button id="compile-btn" type="button">Compile to Python</button>
             <pre id="compile-output" class="compile-output" aria-live="polite"></pre>
           </div>

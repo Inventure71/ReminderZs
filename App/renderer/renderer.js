@@ -5,24 +5,44 @@
   // Simple in-memory store for blocks and connections
   const Store = {
     blocks: new Map(), // uid -> { uid, id, el, data }
-    // Connections
-    exec: new Map(),   // fromUid -> toUid (linked-list semantics)
-    vars: new Map(),   // key "fromUid:out:index" -> { toUid, inIndex }
+    // Exec connections: key `${fromUid}:exec:${outKey}` → { toUid, toExecKey?, toExecIndex? }
+    exec: new Map(),
+    // Variable connections: key `${fromUid}:out:${outIndex}` → Set<{ toUid, inIndex }>
+    vars: new Map(),
+    // Variables catalogue: varUid → { uid, name, type, value, is_global, global_id, local_id }
+    variables: new Map(),
   }
 
   function addBlockToStore(uid, el, data) {
     Store.blocks.set(uid, { uid, id: data.id, el, data })
   }
 
-  function removeConnectionsForBlock(id) {
-    Store.exec.delete(id)
-    Array.from(Store.exec.entries()).forEach(([from, to]) => { if (to === id) Store.exec.delete(from) })
-    Array.from(Store.vars.keys()).forEach((k) => {
-      if (k.startsWith(id + ':')) Store.vars.delete(k)
-    })
-    Array.from(Store.vars.entries()).forEach(([k, v]) => {
-      if (v.toUid === id) Store.vars.delete(k)
-    })
+  function removeConnectionsForBlock(uid) {
+    // Remove exec connections where this uid is source or target
+    for (const [fromKey, val] of Array.from(Store.exec.entries())) {
+      if (val && val.toUid === uid) {
+        Store.exec.delete(fromKey)
+        continue
+      }
+      if (fromKey.startsWith(uid + ':exec:')) {
+        Store.exec.delete(fromKey)
+      }
+    }
+    // Remove any var connections where this uid is source or target
+    for (const [key, setRef] of Array.from(Store.vars.entries())) {
+      const [fromUid] = key.split(':out:')
+      if (fromUid === uid) {
+        Store.vars.delete(key)
+        continue
+      }
+      let changed = false
+      for (const item of Array.from(setRef)) {
+        if (item.toUid === uid) { setRef.delete(item); changed = true }
+      }
+      if (changed && setRef.size === 0) {
+        Store.vars.delete(key)
+      }
+    }
   }
 
   // Canvas connection renderer
@@ -42,11 +62,14 @@
   }
 
   function computeAnchor(el) {
-    const parent = el.closest('.canvas')
+    // Compute in canvas viewport coordinates (SVG overlay space)
+    const canvas = document.getElementById('canvas')
     const target = el.querySelector && el.querySelector('.port-dot') ? el.querySelector('.port-dot') : el
-    const r = target.getBoundingClientRect()
-    const pr = parent.getBoundingClientRect()
-    return { x: r.left - pr.left + r.width / 2, y: r.top - pr.top + r.height / 2 }
+    const tr = target.getBoundingClientRect()
+    const cr = canvas.getBoundingClientRect()
+    const x = tr.left - cr.left + tr.width / 2
+    const y = tr.top - cr.top + tr.height / 2
+    return { x, y }
   }
 
   function drawConnections(canvas) {
@@ -54,12 +77,21 @@
     svg.innerHTML = ''
 
     // Exec connections (one per fromBlock)
-    Store.exec.forEach((toUid, fromUid) => {
+    Store.exec.forEach((val, fromKey) => {
+      const [fromUid, outKey] = fromKey.split(':exec:')
       const fromBlock = Store.blocks.get(fromUid)
-      const toBlock = Store.blocks.get(toUid)
+      const toBlock = val ? Store.blocks.get(val.toUid) : null
       if (!fromBlock || !toBlock) return
-      const fromPort = fromBlock.el.querySelector('.exec.out')
-      const toPort = toBlock.el.querySelector('.exec.in')
+      const selector = outKey ? `.exec.out[data-exec-key="${outKey}"]` : '.exec.out'
+      const fromPort = fromBlock.el.querySelector(selector)
+      let toPort = null
+      if (val && val.toExecKey != null) {
+        toPort = toBlock.el.querySelector(`.exec.in[data-exec-key="${val.toExecKey}"]`)
+      }
+      if (!toPort && val && val.toExecIndex != null) {
+        toPort = toBlock.el.querySelector(`.exec.in[data-exec-index="${val.toExecIndex}"]`)
+      }
+      if (!toPort) toPort = toBlock.el.querySelector('.exec.in')
       if (!fromPort || !toPort) return
       const a = computeAnchor(fromPort)
       const b = computeAnchor(toPort)
@@ -67,17 +99,20 @@
     })
 
     // Var connections
-    Store.vars.forEach(({ toUid, inIndex }, key) => {
+    Store.vars.forEach((toSet, key) => {
       const [fromUid, , outIndexStr] = key.split(':')
       const fromBlock = Store.blocks.get(fromUid)
-      const toBlock = Store.blocks.get(toUid)
-      if (!fromBlock || !toBlock) return
+      if (!fromBlock) return
       const fromPort = fromBlock.el.querySelector(`.port-out[data-index="${outIndexStr}"]`) || fromBlock.el.querySelector(`.port.port-out[data-index="${outIndexStr}"]`)
-      const toPort = toBlock.el.querySelector(`.port-in[data-index="${inIndex}"]`) || toBlock.el.querySelector(`.port.port-in[data-index="${inIndex}"]`)
-      if (!fromPort || !toPort) return
-      const a = computeAnchor(fromPort)
-      const b = computeAnchor(toPort)
-      svg.appendChild(createPath(a, b, 'var'))
+      for (const { toUid, inIndex } of toSet) {
+        const toBlock = Store.blocks.get(toUid)
+        if (!toBlock) continue
+        const toPort = toBlock.el.querySelector(`.port-in[data-index="${inIndex}"]`) || toBlock.el.querySelector(`.port.port-in[data-index="${inIndex}"]`)
+        if (!fromPort || !toPort) continue
+        const a = computeAnchor(fromPort)
+        const b = computeAnchor(toPort)
+        svg.appendChild(createPath(a, b, 'var'))
+      }
     })
   }
 
@@ -115,6 +150,7 @@
       fromUid: blockUid,
       fromDir: direction,
       outIndex: portKind === 'var' ? Number(el.dataset.index) : undefined,
+      execKey: portKind === 'exec' ? (el.dataset.execKey || undefined) : undefined,
       el
     }
     el.classList.add('connecting')
@@ -131,29 +167,34 @@
     if (!blockUid || !(isVar || isExec) || direction !== 'in') return false
 
     if (isExec) {
-      // One-to-one linked list: each block can only have one outgoing and one incoming exec connection
-      // Remove any existing outgoing from fromBlockId
-      Store.exec.delete(ConnectState.active.fromUid)
-      // Also ensure only one incoming per target: remove others pointing to this block
-      Array.from(Store.exec.entries()).forEach(([from, to]) => {
-        if (to === blockUid) Store.exec.delete(from)
-      })
+      // One-to-one per output port; allow multiple distinct output ports
+      const outKey = ConnectState.active.execKey != null ? String(ConnectState.active.execKey) : 'out'
+      const outMapKey = `${ConnectState.active.fromUid}:exec:${outKey}`
+      // Remove existing connection from this specific out port
+      if (Store.exec.has(outMapKey)) Store.exec.delete(outMapKey)
+      // Ensure uniqueness of incoming target per in port
+      const inIndex = Number(el.dataset.execIndex || '0')
+      for (const [k, v] of Array.from(Store.exec.entries())) {
+        if (v && v.toUid === blockUid) {
+          if ((v.toExecIndex != null && v.toExecIndex === inIndex) || (v.toExecKey != null && v.toExecKey === (el.dataset.execKey || undefined))) {
+            Store.exec.delete(k)
+          }
+        }
+      }
       if (ConnectState.active.fromUid !== blockUid) {
-        Store.exec.set(ConnectState.active.fromUid, blockUid)
+        Store.exec.set(outMapKey, { toUid: blockUid, toExecKey: el.dataset.execKey || undefined, toExecIndex: inIndex })
       }
     } else if (isVar) {
       const fromUid = ConnectState.active.fromUid
       const outIndex = ConnectState.active.outIndex || 0
       const key = `${fromUid}:out:${outIndex}`
       const inIndex = Number(el.dataset.index) || 0
-      // enforce single connection per port: clear any existing connections involving these ports
-      Store.vars.delete(key)
-      Array.from(Store.vars.entries()).forEach(([k, v]) => {
-        if (v.toUid === blockUid && v.inIndex === inIndex) Store.vars.delete(k)
-      })
-      if (fromUid !== blockUid) {
-        Store.vars.set(key, { toUid: blockUid, inIndex })
-      }
+      // allow multiple targets from the same output; but keep single incoming per target input
+      if (!Store.vars.has(key)) Store.vars.set(key, new Set())
+      const setRef = Store.vars.get(key)
+      // remove any existing connection to this specific target input
+      for (const item of setRef) { if (item.toUid === blockUid && item.inIndex === inIndex) setRef.delete(item) }
+      if (fromUid !== blockUid) setRef.add({ toUid: blockUid, inIndex })
     }
 
     ConnectState.active.el.classList.remove('connecting')
@@ -179,12 +220,16 @@
         button_class: data.button_class || null,
         has_input_executor: Boolean(data.has_input_executor),
         has_output_executor: Boolean(data.has_output_executor),
+        exec_input_nodes: Array.isArray(data.exec_input_nodes) ? data.exec_input_nodes : [],
+        exec_output_nodes: Array.isArray(data.exec_output_nodes) ? data.exec_output_nodes : [],
         variables_input_nodes: Array.isArray(data.variables_input_nodes) ? data.variables_input_nodes : [],
         variables_input_nodes_types: Array.isArray(data.variables_input_nodes_types) ? data.variables_input_nodes_types : [],
         variables_output_nodes: Array.isArray(data.variables_output_nodes) ? data.variables_output_nodes : [],
         variables_output_nodes_types: Array.isArray(data.variables_output_nodes_types) ? data.variables_output_nodes_types : [],
         in_connection_id: null,
         out_connection_id: null,
+        exec_out_refs: {},
+        exec_in_refs: {},
         variables_input_references: [],
         variables_output_references: [],
         function_name: data.function_name || null,
@@ -192,48 +237,106 @@
       }
 
       // Exec linked list references
-      if (Store.exec.has(uid)) py.out_connection_id = Store.exec.get(uid)
-      // find incoming
-      const incoming = Array.from(Store.exec.entries()).find(([, to]) => to === uid)
-      if (incoming) py.in_connection_id = incoming[0]
+      // Exec refs map by output key -> toUid
+      for (const [k, v] of Store.exec.entries()) {
+        const [fromUid, outKey] = k.split(':exec:')
+        if (fromUid === uid && v) py.exec_out_refs[outKey] = v.toUid
+        if (v && v.toUid === uid) {
+          py.exec_in_refs[outKey] = fromUid
+        }
+      }
 
       // Variable references: for each input index, find any incoming
       const inputCount = py.variables_input_nodes.length
       for (let i = 0; i < inputCount; i++) {
-        const match = Array.from(Store.vars.entries()).find(([, v]) => v.toUid === uid && v.inIndex === i)
-        // For variable blocks, use the variable UID; for others, use fromUid:out:index key
-        if (match) {
-          const [fromUid, , outIndexStr] = match[0].split(':')
-          const src = Store.blocks.get(fromUid)
-          if (src && (src.data.button_class || '').toLowerCase() === 'variable') {
-            py.variables_input_references.push(src.data.variable_uid || src.uid)
-          } else {
-            py.variables_input_references.push(match[0])
+        let ref = null
+        for (const [k, setRef] of Store.vars.entries()) {
+          for (const v of setRef) {
+            if (v.toUid === uid && v.inIndex === i) {
+              const [fromUid] = k.split(':out:')
+              const src = Store.blocks.get(fromUid)
+              if (src && (src.data.button_class || '').toLowerCase() === 'variable') {
+                ref = src.data.variable_uid || src.uid
+              } else {
+                ref = k
+              }
+              break
+            }
           }
-        } else {
-          py.variables_input_references.push(null)
+          if (ref) break
         }
+        py.variables_input_references.push(ref)
       }
       // For outputs, mark where they are connected to
       const outputCount = py.variables_output_nodes.length
       for (let o = 0; o < outputCount; o++) {
         const key = `${uid}:out:${o}`
-        const v = Store.vars.get(key)
-        if (v) {
+        const setRef = Store.vars.get(key)
+        if (!setRef || setRef.size === 0) { py.variables_output_references.push(null); continue }
+        // If there are multiple, collapse to a list string; otherwise single
+        const outTargets = []
+        for (const v of setRef) {
           const target = Store.blocks.get(v.toUid)
           if (target && (target.data.button_class || '').toLowerCase() === 'variable') {
-            py.variables_output_references.push(target.data.variable_uid || target.uid)
+            outTargets.push(target.data.variable_uid || target.uid)
           } else {
-            py.variables_output_references.push(`${v.toUid}:in:${v.inIndex}`)
+            outTargets.push(`${v.toUid}:in:${v.inIndex}`)
           }
-        } else {
-          py.variables_output_references.push(null)
+        }
+        py.variables_output_references.push(outTargets.length === 1 ? outTargets[0] : outTargets)
+      }
+
+      // Inject default variable value metadata if this is a Variable block
+      if ((data.button_class || '').toLowerCase() === 'variable') {
+        const vinfo = data.variable_uid && Store.variables.get(data.variable_uid)
+        if (vinfo) {
+          py.variable = {
+            name: vinfo.name,
+            type: vinfo.type,
+            value: vinfo.value,
+            is_global: !!vinfo.is_global,
+            global_id: vinfo.global_id || null,
+            local_id: vinfo.local_id || null,
+            uid: vinfo.uid
+          }
         }
       }
 
       result.push(py)
     })
-    return result
+    // Only include blocks reachable from BeginPlay (exec graph) and variables feeding into reachable blocks
+    const reachable = new Set()
+    // find begin play block(s)
+    const begins = Array.from(Store.blocks.values()).filter(b => (b.data.button_class || '').toLowerCase() === 'executor' && ((b.data.id || '').toLowerCase().includes('begin') || (b.data.content || '').toLowerCase().includes('begin')))
+    const queue = begins.map(b => b.uid)
+    while (queue.length) {
+      const cur = queue.shift()
+      if (reachable.has(cur)) continue
+      reachable.add(cur)
+      // enqueue exec neighbors for all out ports of cur
+      for (const [k, v] of Store.exec.entries()) {
+        const [fromUid] = k.split(':exec:')
+        if (fromUid === cur && v && !reachable.has(v.toUid)) {
+          queue.push(v.toUid)
+        }
+      }
+    }
+    // include any variable blocks that feed data into reachable blocks
+    const include = new Set(reachable)
+    for (const b of result) {
+      if (include.has(b.uid)) continue
+      // if this block has outputs connected to an included block, include it
+      for (const [key, setRef] of Store.vars.entries()) {
+        const [fromUid] = key.split(':out:')
+        if (fromUid !== b.uid) continue
+        if (!setRef) continue
+        for (const v of setRef) {
+          if (include.has(v.toUid)) { include.add(b.uid); break }
+        }
+        if (include.has(b.uid)) break
+      }
+    }
+    return result.filter(b => include.has(b.uid))
   }
 
   window.CompileBridge = { toPython: compileToPythonBlocks }
@@ -260,62 +363,19 @@
   }
 
   function onReady() {
-    const form = qs('#block-form')
-    const inputsList = qs('#inputs-list')
-    const outputsList = qs('#outputs-list')
-    const addInputBtn = qs('#add-input-var')
-    const addOutputBtn = qs('#add-output-var')
     const canvas = qs('#canvas')
-    const palette = qs('#block-palette')
+    const content = qs('#canvas-content')
+    const builtinList = qs('#builtin-list')
+    const discoveredList = qs('#discovered-list')
     const compileBtn = qs('#compile-btn')
     const compileOut = qs('#compile-output')
+    const debugPython = qs('#debug-python')
+    const varsList = qs('#variables-list')
+    const addVarBtn = qs('#add-var')
+    const inspector = qs('#inspector')
+    const inspectorContent = qs('#inspector-content')
 
-    addInputBtn.addEventListener('click', () => addVarRow(inputsList))
-    addOutputBtn.addEventListener('click', () => addVarRow(outputsList))
-
-    // start with one row each for convenience
-    addVarRow(inputsList)
-    addVarRow(outputsList)
-
-    form.addEventListener('submit', (e) => {
-      e.preventDefault()
-      const fd = new FormData(form)
-      const inputVars = collectVars(inputsList)
-      const outputVars = collectVars(outputsList)
-
-      const blockData = {
-        id: (fd.get('id') || '').toString().trim(),
-        content: (fd.get('content') || '').toString(),
-        button_class: (fd.get('button_class') || '').toString() || null,
-        has_input_executor: fd.get('has_input_executor') === 'on',
-        has_output_executor: fd.get('has_output_executor') === 'on',
-        variables_input_notes: inputVars.names,
-        variables_input_notes_types: inputVars.types,
-        variables_output_notes: outputVars.names,
-        variables_output_notes_types: outputVars.types,
-        function_name: (fd.get('function_name') || '').toString() || null,
-        extra_context_string: (fd.get('extra_context_string') || '').toString() || null
-      }
-
-      if ((blockData.button_class || '').toLowerCase() === 'variable') {
-        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-          blockData.variable_uid = crypto.randomUUID()
-        } else {
-          blockData.variable_uid = 'var-' + Math.random().toString(36).slice(2)
-        }
-      }
-
-      const view = new window.BlockView(blockData)
-      view.el.style.left = Math.round(Math.random() * 400 + 40) + 'px'
-      view.el.style.top = Math.round(Math.random() * 300 + 40) + 'px'
-      canvas.appendChild(view.el)
-      addBlockToStore(view.data.uid, view.el, view.data)
-      wireBlockEvents(view.el, canvas)
-
-      if (window.blocksApi && typeof window.blocksApi.create === 'function') {
-        window.blocksApi.create(blockData)
-      }
-    })
+    // hide manual creation UI; use library buttons instead
 
     if (window.blocksApi && typeof window.blocksApi.list === 'function') {
       window.blocksApi.list().then((blocks) => {
@@ -323,7 +383,7 @@
           const view = new window.BlockView(b)
           view.el.style.left = 40 + (idx * 40) + 'px'
           view.el.style.top = 40 + (idx * 30) + 'px'
-          canvas.appendChild(view.el)
+          content.appendChild(view.el)
           addBlockToStore(view.data.uid, view.el, view.data)
           wireBlockEvents(view.el, canvas)
         })
@@ -336,26 +396,92 @@
       }
     }
 
+    // Pan/Zoom state
+    const View = { scale: 1, x: 0, y: 0 }
+    function applyView() {
+      content.style.transform = `translate(${View.x}px, ${View.y}px) scale(${View.scale})`
+      const svg = canvas.querySelector('svg.conn-layer')
+      if (svg) {
+        // keep svg static sized, but redraw to match current positions
+        drawConnections(canvas)
+      }
+    }
+    function clampScale(s) { return Math.min(2.5, Math.max(0.3, s)) }
+    canvas.addEventListener('wheel', (e) => {
+      // Always treat wheel as zoom for simplicity
+      e.preventDefault()
+      const rect = canvas.getBoundingClientRect()
+      const mx = e.clientX - rect.left
+      const my = e.clientY - rect.top
+      const old = View.scale
+      const delta = e.deltaY < 0 ? 1.1 : 0.9
+      View.scale = clampScale(View.scale * delta)
+      // Zoom around mouse
+      View.x = mx - (mx - View.x) * (View.scale / old)
+      View.y = my - (my - View.y) * (View.scale / old)
+      applyView()
+    }, { passive: false })
+    // Middle mouse or space+drag to pan
+    let panning = false, sx=0, sy=0, ox=0, oy=0
+    function startPan(e) { panning = true; sx = e.clientX; sy = e.clientY; ox = View.x; oy = View.y }
+    function movePan(e) { if (!panning) return; View.x = ox + (e.clientX - sx); View.y = oy + (e.clientY - sy); applyView() }
+    function endPan() { panning = false }
+    canvas.addEventListener('contextmenu', (e) => { e.preventDefault() })
+    canvas.addEventListener('mousedown', (e) => {
+      // Start panning with middle or right button anywhere, or left button when clicking background
+      const isBackground = e.target === canvas || e.target === content
+      if (e.button === 1 || e.buttons === 4 || e.button === 2 || (isBackground && e.button === 0) || (canvas.classList.contains('panning') && e.button === 0)) {
+        e.preventDefault()
+        startPan(e)
+      }
+    })
+    window.addEventListener('mousemove', movePan)
+    window.addEventListener('mouseup', endPan)
+    window.addEventListener('keydown', (e) => { if (e.code === 'Space') canvas.classList.add('panning') })
+    window.addEventListener('keyup', (e) => { if (e.code === 'Space') canvas.classList.remove('panning') })
+    canvas.addEventListener('mousedown', (e) => { if (canvas.classList.contains('panning') && e.button === 0) startPan(e) })
+
+    // Ensure all blocks are appended to content, not canvas root
+    function appendToContent(el) { content.appendChild(el) }
+
     // Palette population
-    if (window.BlockRegistry && typeof window.BlockRegistry.getAll === 'function') {
-      const templates = window.BlockRegistry.getAll()
-      templates.forEach(({ name }) => {
-        const el = document.createElement('button')
-        el.type = 'button'
-        el.className = 'pal-item ' + name.toLowerCase()
-        el.textContent = name
-        el.addEventListener('click', () => {
-          const view = window.BlockFactory.createFromTemplate(name, {
-            id: name,
-            uid: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : ('uid-' + Math.random().toString(36).slice(2)))
+    addBuiltinBlocks(builtinList, canvas, content)
+    ensureBeginPlay(canvas, content)
+
+    // Discovered modules
+    if (window.blocksApi && typeof window.blocksApi.listFunctions === 'function') {
+      window.blocksApi.listFunctions().then((fns) => {
+        (fns || []).slice(0, 100).forEach((fn) => {
+          const el = document.createElement('button')
+          el.type = 'button'
+          el.className = 'pal-item function'
+          el.textContent = `${fn.module_name}.${fn.name}`
+          el.title = (fn.docstring || '')
+          el.addEventListener('click', () => {
+            const inputs = (fn.inputs || []).filter(p => !['vararg','varkw'].includes(p.kind)).map(p => p.name)
+            const inputTypes = (fn.inputs || []).filter(p => !['vararg','varkw'].includes(p.kind)).map(p => p.annotation || 'any')
+            const outName = 'result'
+            const outType = fn.output || 'any'
+            const view = window.BlockFactory.createFromTemplate('Function', {
+              id: `${fn.module_name}.${fn.name}`,
+              button_class: 'Function',
+              content: fn.docstring || 'Function block',
+              has_input_executor: true,
+              has_output_executor: true,
+              variables_input_nodes: inputs,
+              variables_input_nodes_types: inputTypes,
+              variables_output_nodes: [outName],
+              variables_output_nodes_types: [outType],
+              function_name: `${fn.module_name}.${fn.name}`
+            })
+            view.el.style.left = Math.round(Math.random() * 400 + 40) + 'px'
+            view.el.style.top = Math.round(Math.random() * 300 + 40) + 'px'
+            content.appendChild(view.el)
+            addBlockToStore(view.data.uid, view.el, view.data)
+            wireBlockEvents(view.el, canvas)
           })
-          view.el.style.left = Math.round(Math.random() * 400 + 40) + 'px'
-          view.el.style.top = Math.round(Math.random() * 300 + 40) + 'px'
-          canvas.appendChild(view.el)
-          addBlockToStore(view.data.uid, view.el, view.data)
-          wireBlockEvents(view.el, canvas)
+          discoveredList.appendChild(el)
         })
-        palette.appendChild(el)
       })
     }
 
@@ -363,14 +489,167 @@
     wireCanvas(canvas)
 
     // Compile action
-    compileBtn.addEventListener('click', () => {
+    compileBtn.addEventListener('click', async () => {
       const out = window.CompileBridge.toPython()
       compileOut.textContent = JSON.stringify(out, null, 2)
-      if (window.blocksApi && typeof window.blocksApi.create === 'function') {
-        // emit for backend if desired; you can listen to blocks:created
-        window.blocksApi.create({ kind: 'compile', payload: out })
+      if (window.blocksApi && window.blocksApi.backend && typeof window.blocksApi.backend.generateCode === 'function') {
+        const res = await window.blocksApi.backend.generateCode({ blocks: out, debug: !!debugPython.checked })
+        const lines = []
+        lines.push(`exit: ${res.code}`)
+        if (res.stdout) lines.push(`stdout:\n${res.stdout}`)
+        if (res.stderr) lines.push(`stderr:\n${res.stderr}`)
+        console.log('backend.generateCode ->', res)
+        // append to compile output panel for visibility
+        compileOut.textContent = JSON.stringify(out, null, 2) + '\n\n' + lines.join('\n')
       }
     })
+
+    // Variables panel
+    const Variables = {
+      list: [], // { name, type, value, uid, is_global?, global_id?, local_id? }
+    }
+
+    function renderVariables() {
+      varsList.innerHTML = ''
+      Variables.list.forEach((v) => {
+        const el = document.createElement('div')
+        el.className = 'var-item'
+        el.draggable = true
+        el.innerHTML = `<span class="name">${v.name}</span><span class="type">${v.type || 'any'}</span>`
+        el.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('application/x-var', JSON.stringify(v))
+        })
+        el.addEventListener('click', () => showInspectorForVar(v))
+        varsList.appendChild(el)
+      })
+    }
+
+    function showInspectorForVar(v) {
+      inspectorContent.innerHTML = ''
+      const nameLbl = document.createElement('label')
+      nameLbl.textContent = 'Name'
+      const nameInput = document.createElement('input')
+      nameInput.value = v.name
+      nameInput.addEventListener('input', () => { v.name = nameInput.value; renderVariables(); })
+      const typeLbl = document.createElement('label')
+      typeLbl.textContent = 'Type'
+      const typeInput = document.createElement('input')
+      typeInput.value = v.type || ''
+      typeInput.addEventListener('input', () => { v.type = typeInput.value; renderVariables(); })
+      const valueLbl = document.createElement('label')
+      valueLbl.textContent = 'Value'
+      const valueInput = document.createElement('input')
+      valueInput.value = v.value == null ? '' : String(v.value)
+      valueInput.addEventListener('input', () => { v.value = valueInput.value })
+      inspectorContent.appendChild(nameLbl)
+      inspectorContent.appendChild(nameInput)
+      inspectorContent.appendChild(typeLbl)
+      inspectorContent.appendChild(typeInput)
+      inspectorContent.appendChild(valueLbl)
+      inspectorContent.appendChild(valueInput)
+      // Sync to Store.variables
+      Store.variables.set(v.uid, v)
+    }
+
+    addVarBtn.addEventListener('click', () => {
+      const uid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : ('var-' + Math.random().toString(36).slice(2))
+      Variables.list.push({ name: 'var' + (Variables.list.length + 1), type: 'any', value: '', uid, is_global: false, global_id: null, local_id: null })
+      Store.variables.set(uid, Variables.list[Variables.list.length - 1])
+      renderVariables()
+    })
+
+    // Allow dropping variable onto canvas to create a Variable block bound to that variable uid
+    canvas.addEventListener('dragover', (e) => {
+      if (e.dataTransfer.types.includes('application/x-var')) e.preventDefault()
+    })
+    canvas.addEventListener('drop', (e) => {
+      const data = e.dataTransfer.getData('application/x-var')
+      if (!data) return
+      e.preventDefault()
+      const v = JSON.parse(data)
+      const view = window.BlockFactory.createFromTemplate('Variable', {
+        id: 'Variable',
+        button_class: 'Variable',
+        content: `Variable ${v.name}`,
+        variable_uid: v.uid,
+        variables_output_nodes: ['value'],
+        variables_output_nodes_types: [v.type || 'any']
+      })
+      const rect = canvas.getBoundingClientRect()
+      // invert current transform to compute content coords
+      const transform = getComputedStyle(content).transform
+      let scale = 1, tx = 0, ty = 0
+      if (transform && transform !== 'none') {
+        const m = transform.match(/matrix\(([^)]+)\)/)
+        if (m) { const parts = m[1].split(',').map(parseFloat); scale = parts[0]||1; tx = parts[4]||0; ty = parts[5]||0 }
+      }
+      const cx = (e.clientX - rect.left - tx) / scale
+      const cy = (e.clientY - rect.top - ty) / scale
+      view.el.style.left = (cx - 40) + 'px'
+      view.el.style.top = (cy - 20) + 'px'
+      content.appendChild(view.el)
+      addBlockToStore(view.data.uid, view.el, view.data)
+      wireBlockEvents(view.el, canvas)
+    })
+  }
+
+  function addBuiltinBlocks(container, canvas, content) {
+    const builtins = [
+      { name: 'Print', cls: 'Function', fn: 'builtins.print', inputs: ['value'], inputTypes: ['any'], out: null, outType: null, content: 'Print value' },
+      { name: 'Add', cls: 'Function', fn: 'math_add', inputs: ['a','b'], inputTypes: ['number','number'], out: 'sum', outType: 'number', content: 'Add two numbers' },
+      { name: 'Max', cls: 'Function', fn: 'math_max', inputs: ['a','b'], inputTypes: ['number','number'], out: 'max', outType: 'number', content: 'Max of two' },
+      { name: 'Var', cls: 'Variable', fn: null, inputs: [], inputTypes: [], out: 'value', outType: 'any', content: 'Variable source' },
+      { name: 'If', cls: 'Conditional', fn: 'flow_if', inputs: ['condition'], inputTypes: ['bool'], out: null, outType: null, content: 'If condition' },
+    ]
+    builtins.forEach((b) => {
+      const el = document.createElement('button')
+      el.type = 'button'
+      el.className = 'pal-item ' + b.cls.toLowerCase()
+      el.textContent = b.name
+      el.addEventListener('click', () => {
+        const overrides = {
+          id: b.fn || b.name,
+          button_class: b.cls,
+          content: b.content,
+          has_input_executor: b.cls !== 'Variable',
+          has_output_executor: b.cls !== 'Variable',
+          variables_input_nodes: b.inputs,
+          variables_input_nodes_types: b.inputTypes,
+          variables_output_nodes: b.out ? [b.out] : (b.cls === 'Variable' ? ['value'] : []),
+          variables_output_nodes_types: b.outType ? [b.outType] : (b.cls === 'Variable' ? ['any'] : []),
+          function_name: b.fn
+        }
+        const view = window.BlockFactory.createFromTemplate(b.cls, overrides)
+        view.el.style.left = Math.round(Math.random() * 400 + 40) + 'px'
+        view.el.style.top = Math.round(Math.random() * 300 + 40) + 'px'
+        content.appendChild(view.el)
+        addBlockToStore(view.data.uid, view.el, view.data)
+        wireBlockEvents(view.el, canvas)
+      })
+      container.appendChild(el)
+    })
+  }
+
+  function ensureBeginPlay(canvas, content) {
+    // create a Begin Play executor once if not present
+    const exists = Array.from(Store.blocks.values()).some(b => (b.data.button_class || '').toLowerCase() === 'executor' && (b.data.id || '').toLowerCase().includes('begin'))
+    if (exists) return
+    const view = window.BlockFactory.createFromTemplate('Executor', {
+      id: 'BeginPlay',
+      button_class: 'Executor',
+      content: 'Begin Play',
+      has_input_executor: false,
+      has_output_executor: true,
+      variables_input_nodes: [],
+      variables_input_nodes_types: [],
+      variables_output_nodes: [],
+      variables_output_nodes_types: []
+    })
+    view.el.style.left = '40px'
+    view.el.style.top = '40px'
+    content.appendChild(view.el)
+    addBlockToStore(view.data.uid, view.el, view.data)
+    wireBlockEvents(view.el, canvas)
   }
 
   function wireBlockEvents(blockEl, canvas) {
@@ -393,6 +672,18 @@
 
     // while dragging blocks, update lines
     blockEl.addEventListener('block:moved', () => drawConnections(canvas))
+
+    // deletion
+    blockEl.addEventListener('block:delete', (e) => {
+      const uid = e.detail && e.detail.uid
+      if (!uid) return
+      // remove element
+      blockEl.remove()
+      // cleanup store
+      removeConnectionsForBlock(uid)
+      Store.blocks.delete(uid)
+      drawConnections(canvas)
+    })
   }
 
   // Global canvas listeners to cancel connection and live-draw preview

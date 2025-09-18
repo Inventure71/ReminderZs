@@ -20,13 +20,21 @@ class Block:
         self.button_class = None # "Executor", "Function", "Variable", "Conditional"
         self.has_input_executor = False
         self.has_output_executor = False
+        # New: support N exec inputs and outputs by keys/names
+        self.exec_input_nodes = []  # e.g. ["in"] or ["in1","in2"]
+        self.exec_output_nodes = [] # e.g. ["out"] or ["then","else"]
         self.variables_input_nodes = [] # list of names of variables that are input to the block
         self.variables_input_nodes_types = [] # list of types of variables that are input to the block
         self.variables_output_nodes = [] # list of names of variables that are output from the block
         self.variables_output_nodes_types = [] # list of types of variables that are output from the block
 
+        # Legacy single exec references retained for compatibility
         self.out_connection_id = None
         self.in_connection_id = None
+        # New: exec connection maps keyed by exec port keys
+        # Example: { "out": "to_uid", "then": "uid1", "else": "uid2" }
+        self.exec_out_refs = {}
+        self.exec_in_refs = {}
         self.variables_input_references = [] # list of references of variables that are input to the block
         self.variables_output_references = [] # list of references of variables that are output from the block
         self.function_name = None # name of the function to call if the block is a function
@@ -46,12 +54,16 @@ class Block:
         self.button_class = json_data['button_class']
         self.has_input_executor = json_data['has_input_executor']
         self.has_output_executor = json_data['has_output_executor']
+        self.exec_input_nodes = json_data.get('exec_input_nodes', [])
+        self.exec_output_nodes = json_data.get('exec_output_nodes', [])
         self.variables_input_nodes = json_data['variables_input_nodes']
         self.variables_input_nodes_types = json_data['variables_input_nodes_types']
         self.variables_output_nodes = json_data['variables_output_nodes']
         self.variables_output_nodes_types = json_data['variables_output_nodes_types']
         self.out_connection_id = json_data['out_connection_id']
         self.in_connection_id = json_data['in_connection_id']
+        self.exec_out_refs = json_data.get('exec_out_refs', {})
+        self.exec_in_refs = json_data.get('exec_in_refs', {})
         self.variables_input_references = json_data['variables_input_references']
         self.variables_output_references = json_data['variables_output_references']
 
@@ -64,12 +76,16 @@ class Block:
             'button_class': self.button_class,
             'has_input_executor': self.has_input_executor,
             'has_output_executor': self.has_output_executor,
+            'exec_input_nodes': self.exec_input_nodes,
+            'exec_output_nodes': self.exec_output_nodes,
             'variables_input_nodes': self.variables_input_nodes,
             'variables_input_nodes_types': self.variables_input_nodes_types,
             'variables_output_nodes': self.variables_output_nodes,
             'variables_output_nodes_types': self.variables_output_nodes_types,
             'out_connection_id': self.out_connection_id,
             'in_connection_id': self.in_connection_id,
+            'exec_out_refs': self.exec_out_refs,
+            'exec_in_refs': self.exec_in_refs,
             'variables_input_references': self.variables_input_references,
             'variables_output_references': self.variables_output_references
         }

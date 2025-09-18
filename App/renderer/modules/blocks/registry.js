@@ -35,6 +35,8 @@
       content: 'Executes next block',
       has_input_executor: true,
       has_output_executor: true,
+      exec_input_nodes: ['in'],
+      exec_output_nodes: ['out'],
       variables_input_notes: [],
       variables_input_notes_types: [],
       variables_output_notes: [],
@@ -45,6 +47,8 @@
       content: 'Function block',
       has_input_executor: true,
       has_output_executor: true,
+      exec_input_nodes: ['in'],
+      exec_output_nodes: ['out'],
       variables_input_notes: ['input'],
       variables_input_notes_types: ['any'],
       variables_output_notes: ['result'],
@@ -55,6 +59,8 @@
       content: 'Variable source',
       has_input_executor: false,
       has_output_executor: false,
+      exec_input_nodes: [],
+      exec_output_nodes: [],
       variables_input_nodes: [],
       variables_input_nodes_types: [],
       variables_output_nodes: ['value'],
@@ -62,13 +68,15 @@
     })
 
     registerTemplate('Conditional', {
-      content: 'Conditional routing',
+      content: 'If condition',
       has_input_executor: true,
-      has_output_executor: true,
-      variables_input_notes: ['condition'],
-      variables_input_notes_types: ['bool'],
-      variables_output_notes: ['then', 'else'],
-      variables_output_notes_types: ['any', 'any']
+      has_output_executor: true, // two exec outs
+      exec_input_nodes: ['in'],
+      exec_output_nodes: ['then', 'else'],
+      variables_input_nodes: ['condition'],
+      variables_input_nodes_types: ['bool'],
+      variables_output_nodes: [],
+      variables_output_nodes_types: []
     })
   }
 

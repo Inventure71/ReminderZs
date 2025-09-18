@@ -25,6 +25,14 @@
         button_class: d.button_class || null, // Executor | Function | Variable | Conditional
         has_input_executor: Boolean(d.has_input_executor),
         has_output_executor: Boolean(d.has_output_executor),
+        exec_input_nodes: Array.isArray(d.exec_input_nodes)
+          ? d.exec_input_nodes
+          : (d.has_input_executor ? ['in'] : []),
+        exec_output_nodes: Array.isArray(d.exec_output_nodes)
+          ? d.exec_output_nodes
+          : ((d.has_output_executor && (d.button_class || '').toLowerCase() === 'conditional')
+              ? ['then', 'else']
+              : (d.has_output_executor ? ['out'] : [])),
         // accept legacy fields with "notes" if present, but prefer "nodes"
         variables_input_nodes: Array.isArray(d.variables_input_nodes) ? d.variables_input_nodes : (Array.isArray(d.variables_input_notes) ? d.variables_input_notes : []),
         variables_input_nodes_types: Array.isArray(d.variables_input_nodes_types) ? d.variables_input_nodes_types : (Array.isArray(d.variables_input_notes_types) ? d.variables_input_notes_types : []),
@@ -76,11 +84,13 @@
       return port
     }
 
-    #renderExecutorPort(kind) {
+    #renderExecutorPort(kind, key, idx) {
       const el = createElement('div', `exec ${kind}`)
       el.dataset.port = 'exec'
       el.dataset.direction = kind
-      el.title = kind === 'in' ? 'Executor In' : 'Executor Out'
+      if (key != null) el.dataset.execKey = String(key)
+      if (idx != null) el.dataset.execIndex = String(idx)
+      el.title = (kind === 'in' ? 'Exec In' : 'Exec Out') + (key ? ` (${key})` : '')
       return el
     }
 
@@ -89,7 +99,24 @@
       const uid = createElement('div', 'block-uid', [createText('#' + (this.data.uid || '').slice(0, 8))])
       const badgeText = this.data.button_class || 'Block'
       const badge = createElement('span', `badge ${badgeText.toLowerCase()}`, [createText(badgeText)])
-      return createElement('div', 'block-header', [title, badge, uid])
+      const del = createElement('button', 'block-del', [createText('×')])
+      del.type = 'button'
+      del.title = 'Delete block'
+      // prevent dragging from starting when clicking delete
+      del.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault() })
+      del.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const ev = new CustomEvent('block:delete', { bubbles: true, detail: { uid: this.data.uid } })
+        this.el.dispatchEvent(ev)
+      })
+      // prevent deleting Begin Play
+      const isBegin = (this.data.button_class || '').toLowerCase() === 'executor' && ((this.data.id || '').toLowerCase().includes('begin') || (this.data.content || '').toLowerCase().includes('begin'))
+      if (isBegin) {
+        del.disabled = true
+        del.title = 'Cannot delete Begin Play'
+      }
+      const right = createElement('div', 'block-right', [badge, uid, del])
+      return createElement('div', 'block-header', [title, right])
     }
 
     #renderBody() {
@@ -125,12 +152,20 @@
       block.appendChild(header)
       block.appendChild(body)
 
-      if (this.data.has_input_executor) {
-        body.appendChild(this.#renderExecutorPort('in'))
-      }
-      if (this.data.has_output_executor) {
-        body.appendChild(this.#renderExecutorPort('out'))
-      }
+      // Exec inputs (left side, vertically stacked)
+      this.data.exec_input_nodes.forEach((key, idx) => {
+        const el = this.#renderExecutorPort('in', key, idx)
+        el.style.left = `-7px`
+        el.style.top = `${-7 + idx * 20}px`
+        body.appendChild(el)
+      })
+      // Exec outputs (right side, vertically stacked)
+      this.data.exec_output_nodes.forEach((key, idx) => {
+        const el = this.#renderExecutorPort('out', key, idx)
+        el.style.right = `-7px`
+        el.style.top = `${-7 + idx * 20}px`
+        body.appendChild(el)
+      })
 
       block.dataset.blockId = this.data.id || ''
       block.dataset.blockUid = this.data.uid || ''
