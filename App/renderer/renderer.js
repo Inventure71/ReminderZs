@@ -7,7 +7,7 @@
     blocks: new Map(), // uid -> { uid, id, el, data }
     // Exec connections: key `${fromUid}:exec:${outKey}` → { toUid, toExecKey?, toExecIndex? }
     exec: new Map(),
-    // Variable connections: key `${fromUid}:out:${outIndex}` → { toUid, inIndex } (single target per output)
+    // Variable connections: key `${fromUid}:out:${outIndex}` → Set<{ toUid, inIndex }>
     vars: new Map(),
     // Variables catalogue: varUid → { uid, name, type, value, is_global, global_id, local_id }
     variables: new Map(),
@@ -29,9 +29,17 @@
       }
     }
     // Remove any var connections where this uid is source or target
-    for (const [key, val] of Array.from(Store.vars.entries())) {
+    for (const [key, setRef] of Array.from(Store.vars.entries())) {
       const [fromUid] = key.split(':out:')
-      if (fromUid === uid || (val && val.toUid === uid)) {
+      if (fromUid === uid) {
+        Store.vars.delete(key)
+        continue
+      }
+      let changed = false
+      for (const item of Array.from(setRef)) {
+        if (item.toUid === uid) { setRef.delete(item); changed = true }
+      }
+      if (changed && setRef.size === 0) {
         Store.vars.delete(key)
       }
     }
@@ -91,18 +99,20 @@
     })
 
     // Var connections
-    Store.vars.forEach((val, key) => {
+    Store.vars.forEach((toSet, key) => {
       const [fromUid, , outIndexStr] = key.split(':')
       const fromBlock = Store.blocks.get(fromUid)
-      if (!fromBlock || !val) return
+      if (!fromBlock) return
       const fromPort = fromBlock.el.querySelector(`.port-out[data-index="${outIndexStr}"]`) || fromBlock.el.querySelector(`.port.port-out[data-index="${outIndexStr}"]`)
-      const toBlock = Store.blocks.get(val.toUid)
-      if (!toBlock) return
-      const toPort = toBlock.el.querySelector(`.port-in[data-index="${val.inIndex}"]`) || toBlock.el.querySelector(`.port.port-in[data-index="${val.inIndex}"]`)
-      if (!fromPort || !toPort) return
-      const a = computeAnchor(fromPort)
-      const b = computeAnchor(toPort)
-      svg.appendChild(createPath(a, b, 'var'))
+      for (const { toUid, inIndex } of toSet) {
+        const toBlock = Store.blocks.get(toUid)
+        if (!toBlock) continue
+        const toPort = toBlock.el.querySelector(`.port-in[data-index="${inIndex}"]`) || toBlock.el.querySelector(`.port.port-in[data-index="${inIndex}"]`)
+        if (!fromPort || !toPort) continue
+        const a = computeAnchor(fromPort)
+        const b = computeAnchor(toPort)
+        svg.appendChild(createPath(a, b, 'var'))
+      }
     })
   }
 
@@ -179,13 +189,19 @@
       const outIndex = ConnectState.active.outIndex || 0
       const key = `${fromUid}:out:${outIndex}`
       const inIndex = Number(el.dataset.index) || 0
-      // enforce single target per variable output port
-      Store.vars.set(key, { toUid: blockUid, inIndex })
-      // ensure uniqueness of incoming per target input by clearing other outputs pointing to same input
-      for (const [k, v] of Array.from(Store.vars.entries())) {
-        if (k !== key && v && v.toUid === blockUid && v.inIndex === inIndex) {
-          Store.vars.delete(k)
+      // allow multiple targets from the same output; but keep single incoming per target input
+      if (!Store.vars.has(key)) Store.vars.set(key, new Set())
+      const setRef = Store.vars.get(key)
+      // remove any existing connection to this specific target input
+      for (const item of setRef) { if (item.toUid === blockUid && item.inIndex === inIndex) setRef.delete(item) }
+      if (fromUid !== blockUid) setRef.add({ toUid: blockUid, inIndex })
+      // ensure single incoming per target input globally
+      for (const [k, s] of Array.from(Store.vars.entries())) {
+        if (k === key) continue
+        for (const it of Array.from(s)) {
+          if (it.toUid === blockUid && it.inIndex === inIndex) s.delete(it)
         }
+        if (s.size === 0) Store.vars.delete(k)
       }
     }
 
@@ -242,32 +258,39 @@
       const inputCount = py.variables_input_nodes.length
       for (let i = 0; i < inputCount; i++) {
         let ref = null
-        for (const [k, v] of Store.vars.entries()) {
-          if (v && v.toUid === uid && v.inIndex === i) {
-            const [fromUid] = k.split(':out:')
-            const src = Store.blocks.get(fromUid)
-            if (src && (src.data.button_class || '').toLowerCase() === 'variable') {
-              ref = src.data.variable_uid || src.uid
-            } else {
-              ref = k
+        for (const [k, setRef] of Store.vars.entries()) {
+          for (const v of setRef) {
+            if (v.toUid === uid && v.inIndex === i) {
+              const [fromUid] = k.split(':out:')
+              const src = Store.blocks.get(fromUid)
+              if (src && (src.data.button_class || '').toLowerCase() === 'variable') {
+                ref = src.data.variable_uid || src.uid
+              } else {
+                ref = k
+              }
+              break
             }
-            break
           }
+          if (ref) break
         }
         py.variables_input_references.push(ref)
       }
-      // For outputs, mark where they are connected to (standardized: per-output ref or null; single target enforced)
+      // For outputs, mark where they are connected to (standardized: per-output array of refs or null; fan-out allowed)
       const outputCount = py.variables_output_nodes.length
       for (let o = 0; o < outputCount; o++) {
         const key = `${uid}:out:${o}`
-        const v = Store.vars.get(key)
-        if (!v) { py.variables_output_references.push(null); continue }
-        const target = Store.blocks.get(v.toUid)
-        if (target && (target.data.button_class || '').toLowerCase() === 'variable') {
-          py.variables_output_references.push(target.data.variable_uid || target.uid)
-        } else {
-          py.variables_output_references.push(`${v.toUid}:in:${v.inIndex}`)
+        const setRef = Store.vars.get(key)
+        if (!setRef || setRef.size === 0) { py.variables_output_references.push(null); continue }
+        const outTargets = []
+        for (const v of setRef) {
+          const target = Store.blocks.get(v.toUid)
+          if (target && (target.data.button_class || '').toLowerCase() === 'variable') {
+            outTargets.push(target.data.variable_uid || target.uid)
+          } else {
+            outTargets.push(`${v.toUid}:in:${v.inIndex}`)
+          }
         }
+        py.variables_output_references.push(outTargets)
       }
 
       // Inject default variable value metadata if this is a Variable block
@@ -310,11 +333,13 @@
     for (const b of result) {
       if (include.has(b.uid)) continue
       // if this block has outputs connected to an included block, include it
-      for (const [key, v] of Store.vars.entries()) {
+      for (const [key, setRef] of Store.vars.entries()) {
         const [fromUid] = key.split(':out:')
         if (fromUid !== b.uid) continue
-        if (!v) continue
-        if (include.has(v.toUid)) { include.add(b.uid); break }
+        for (const v of setRef) {
+          if (include.has(v.toUid)) { include.add(b.uid); break }
+        }
+        if (include.has(b.uid)) break
       }
     }
     return result.filter(b => include.has(b.uid))
