@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ReminderZs UI</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <h1>ReminderZs Blocks</h1>
+      </header>
+      <main class="content">
+        <section class="sidebar">
+          <div id="block-palette" class="palette"></div>
+          <form id="block-form" autocomplete="off">
+            <h2>Create Block</h2>
+            <label>
+              ID (type)
+              <input name="id" type="text" placeholder="Function/Variable/Custom">
+            </label>
+            <label>
+              Content
+              <input name="content" type="text" placeholder="Some content">
+            </label>
+            <label>
+              Function Name (optional)
+              <input name="function_name" type="text" placeholder="my_function">
+            </label>
+            <label>
+              Extra Context (optional)
+              <input name="extra_context_string" type="text" placeholder="notes...">
+            </label>
+            <label>
+              Class
+              <select name="button_class">
+                <option value="">(none)</option>
+                <option>Executor</option>
+                <option>Function</option>
+                <option>Variable</option>
+                <option>Conditional</option>
+              </select>
+            </label>
+            <div class="row">
+              <label class="checkbox">
+                <input name="has_input_executor" type="checkbox"> Input Executor
+              </label>
+              <label class="checkbox">
+                <input name="has_output_executor" type="checkbox"> Output Executor
+              </label>
+            </div>
+
+            <div class="vars-group">
+              <h3>Input Variables</h3>
+              <div id="inputs-list" class="vars-list"></div>
+              <button type="button" id="add-input-var">Add input</button>
+            </div>
+
+            <div class="vars-group">
+              <h3>Output Variables</h3>
+              <div id="outputs-list" class="vars-list"></div>
+              <button type="button" id="add-output-var">Add output</button>
+            </div>
+
+            <div class="actions">
+              <button type="submit">Create Block</button>
+            </div>
+          </form>
+        </section>
+        <section class="canvas-wrap">
+          <div id="canvas" class="canvas" aria-label="Block canvas"></div>
+          <div class="compile-bar">
+            <button id="compile-btn" type="button">Compile to Python</button>
+            <pre id="compile-output" class="compile-output" aria-live="polite"></pre>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./components/Block.js"></script>
+    <script src="./modules/blocks/registry.js"></script>
+    <script src="./modules/blocks/factory.js"></script>
+    <script src="./renderer.js"></script>
+  </body>
+  </html>
+
+

@@ -1,0 +1,6 @@
+/App/rag_index_manual
+/HuggingFace
+/RAG_tests
+/.pytest_cache
+/__pycache__
+/App/node_modules

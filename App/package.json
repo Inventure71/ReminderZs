@@ -1,0 +1,21 @@
+{
+  "name": "reminderzs-ui",
+  "version": "0.1.0",
+  "description": "Electron UI for ReminderZs blocks",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "test": "echo \"No tests\""
+  },
+  "keywords": [
+    "electron",
+    "reminderzs",
+    "ui"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^38.1.2"
+  }
+}
