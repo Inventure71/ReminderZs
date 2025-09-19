@@ -475,6 +475,69 @@ const Variables = {
     const loadBtn = qs('#load-project')
     const inspector = qs('#inspector')
     const inspectorContent = qs('#inspector-content')
+    
+    // Debug window elements
+    const debugWindow = qs('#debug-window')
+    const debugWindowClose = qs('#debug-window-close')
+    const debugWindowMinimize = qs('#debug-window-minimize')
+    const generatedScript = qs('#generated-script')
+    const debugTabs = qsa('.debug-tab')
+    const debugPanels = qsa('.debug-panel')
+
+    // Debug window management
+    let debugWindowMinimized = false
+    
+    function showDebugWindow() {
+      debugWindow.style.display = 'block'
+      if (debugWindowMinimized) {
+        debugWindow.classList.remove('minimized')
+        debugWindowMinimized = false
+      }
+    }
+    
+    function hideDebugWindow() {
+      debugWindow.style.display = 'none'
+      debugWindowMinimized = false
+    }
+    
+    function minimizeDebugWindow() {
+      debugWindow.classList.add('minimized')
+      debugWindowMinimized = true
+    }
+    
+    function switchDebugTab(tabName) {
+      debugTabs.forEach(tab => {
+        if (tab.dataset.tab === tabName) {
+          tab.classList.add('active')
+        } else {
+          tab.classList.remove('active')
+        }
+      })
+      debugPanels.forEach(panel => {
+        if (panel.id === `debug-${tabName}`) {
+          panel.classList.add('active')
+        } else {
+          panel.classList.remove('active')
+        }
+      })
+    }
+    
+    // Debug window event listeners
+    debugWindowClose.addEventListener('click', hideDebugWindow)
+    debugWindowMinimize.addEventListener('click', () => {
+      if (debugWindowMinimized) {
+        debugWindow.classList.remove('minimized')
+        debugWindowMinimized = false
+      } else {
+        minimizeDebugWindow()
+      }
+    })
+    
+    debugTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        switchDebugTab(tab.dataset.tab)
+      })
+    })
 
     // hide manual creation UI; use library buttons instead
 
@@ -613,25 +676,82 @@ const Variables = {
     // Compile action
     compileBtn.addEventListener('click', async () => {
       console.log('[UI] Compile clicked')
+      
+      // Show debug window
+      showDebugWindow()
+      
+      // Update compile button to show loading state
+      const originalText = compileBtn.textContent
+      compileBtn.textContent = 'Compiling...'
+      compileBtn.disabled = true
+      
       const out = window.CompileBridge.toPython()
-      compileOut.textContent = JSON.stringify(out, null, 2)
+      // Always show the JSON conversion result at the top of the Output tab
+      const jsonText = JSON.stringify(out, null, 2)
+      compileOut.textContent = jsonText + '\n\nProcessing...'
+      
+      // Show generated script in the script tab
+      generatedScript.textContent = 'Generating Python script...'
+      
       if (window.blocksApi && window.blocksApi.backend && typeof window.blocksApi.backend.generateCode === 'function') {
         let res
         try {
           res = await window.blocksApi.backend.generateCode({ blocks: out, debug: !!debugPython.checked })
         } catch (e) {
           console.error('[UI] backend.generateCode failed', e)
-          compileOut.textContent += '\n\nbackend.generateCode error: ' + (e && e.message || e)
+          compileOut.textContent = jsonText + '\n\n' + `❌ Error: ${e && e.message || e}`
+          generatedScript.textContent = `Error generating script:\n${e && e.message || e}`
+          compileBtn.textContent = originalText
+          compileBtn.disabled = false
           return
         }
+        
+        // Extract generated script from stdout (Python prints the script)
+        let extractedScript = 'No script generated'
+        let pythonOutput = res.stdout || ''
+        
+        if (pythonOutput) {
+          // The Python script is typically the first part of stdout
+          // Look for script markers or just use the whole stdout as script
+          extractedScript = pythonOutput
+        }
+        
+        // Update the output tab
         const lines = []
-        lines.push(`exit: ${res.code}`)
-        if (res.stdout) lines.push(`stdout:\n${res.stdout}`)
-        if (res.stderr) lines.push(`stderr:\n${res.stderr}`)
+        if (res.code !== undefined) {
+          if (res.code === 0) {
+            lines.push(`✅ Compilation successful (Exit Code: ${res.code})`)
+          } else {
+            lines.push(`❌ Compilation failed (Exit Code: ${res.code})`)
+          }
+        }
+        
+        if (res.stderr) {
+          lines.push(`\n⚠️ Python Errors:`)
+          lines.push(res.stderr)
+        }
+        
+        if (res.code === 0) {
+          lines.push(`\n🎯 Script executed successfully!`)
+          if (pythonOutput && pythonOutput !== extractedScript) {
+            lines.push(`\n📤 Execution Output:`)
+            lines.push(pythonOutput)
+          }
+        }
+        
         console.log('backend.generateCode ->', res)
-        // append to compile output panel for visibility
-        compileOut.textContent = JSON.stringify(out, null, 2) + '\n\n' + lines.join('\n')
+        compileOut.textContent = jsonText + '\n\n' + (lines.join('\n') || 'No output')
+        
+        // Show the generated script
+        generatedScript.textContent = extractedScript
+      } else {
+        compileOut.textContent = jsonText + '\n\nBackend API not available'
+        generatedScript.textContent = JSON.stringify(out, null, 2)
       }
+      
+      // Reset compile button
+      compileBtn.textContent = originalText
+      compileBtn.disabled = false
     })
 
     // Variables panel

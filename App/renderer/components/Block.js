@@ -103,7 +103,6 @@
         
         // Add inline input field for default types when not connected
         if (this.#shouldShowInlineInput(type, side, index)) {
-          console.log(`Creating inline input for port ${index}, type: ${type}, side: ${side}`)
           const inlineInput = this.#createInlineInput(type, index)
           port.appendChild(inlineInput)
         }
@@ -128,13 +127,8 @@
     }
     
     #createInlineInput(type, index) {
-      console.log(`Creating input element for type: ${type}, index: ${index}`)
       const wrapper = createElement('div', 'port-inline-input')
       const input = createElement('input', 'inline-value-input')
-      
-      // Add visual debugging
-      wrapper.style.backgroundColor = 'rgba(255,0,0,0.1)' // Temporary red background
-      wrapper.title = `Inline input for ${type} (index ${index})`
       
       const normalizedType = (type || '').toLowerCase()
       

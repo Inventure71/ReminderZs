@@ -10,6 +10,13 @@
     <div class="app-shell">
       <header class="topbar">
         <h1>ReminderZs Blocks</h1>
+        <div class="topbar-actions">
+          <label class="checkbox"><input type="checkbox" id="debug-python"> Debug Python</label>
+          <button id="compile-btn" type="button" class="compile-button">
+            <span class="compile-icon">▶</span>
+            Compile & Run
+          </button>
+        </div>
       </header>
       <main class="content">
         <section class="sidebar">
@@ -37,11 +44,6 @@
             <h2>Inspector</h2>
             <div id="inspector-content" class="inspector-content">Select a variable to edit</div>
           </aside>
-          <div class="compile-bar">
-            <label class="checkbox"><input type="checkbox" id="debug-python"> Debug Python</label>
-            <button id="compile-btn" type="button">Compile to Python</button>
-            <pre id="compile-output" class="compile-output" aria-live="polite"></pre>
-          </div>
         </section>
       </main>
     </div>
@@ -52,6 +54,34 @@
         <input type="text" id="block-search" placeholder="Search blocks..." autocomplete="off">
       </div>
       <div id="context-menu-results" class="context-menu-results"></div>
+    </div>
+
+    <!-- Floating debug output window -->
+    <div id="debug-window" class="debug-window" style="display: none;">
+      <div class="debug-window-header">
+        <div class="debug-window-title">
+          <span class="debug-icon">🐍</span>
+          Python Output
+        </div>
+        <div class="debug-window-controls">
+          <button id="debug-window-minimize" class="debug-control-btn" title="Minimize">−</button>
+          <button id="debug-window-close" class="debug-control-btn" title="Close">×</button>
+        </div>
+      </div>
+      <div class="debug-window-content">
+        <div class="debug-tabs">
+          <button class="debug-tab active" data-tab="output">Output</button>
+          <button class="debug-tab" data-tab="script">Generated Script</button>
+        </div>
+        <div class="debug-content">
+          <div id="debug-output" class="debug-panel active">
+            <pre id="compile-output" class="compile-output" aria-live="polite">Ready to compile...</pre>
+          </div>
+          <div id="debug-script" class="debug-panel">
+            <pre id="generated-script" class="generated-script">No script generated yet.</pre>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script src="./components/Block.js"></script>
