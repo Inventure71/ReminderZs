@@ -142,9 +142,17 @@ if __name__ == "__main__":
         # Enforced ordering from UI: one entry per input, either variable UID, "fromUid:out:index", or null
         refs = block.get('variables_input_references') or []
         if idx >= len(refs):
+            # Check for inline value when no connection
+            inline_values = block.get('inline_values') or {}
+            if str(idx) in inline_values:
+                return py_literal(inline_values[str(idx)])
             return 'None'
         ref = refs[idx]
         if ref is None:
+            # Check for inline value when no connection
+            inline_values = block.get('inline_values') or {}
+            if str(idx) in inline_values:
+                return py_literal(inline_values[str(idx)])
             return 'None'
         # If reference is a variable uid
         if isinstance(ref, str) and ':' not in ref:

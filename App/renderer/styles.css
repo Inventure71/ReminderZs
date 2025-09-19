@@ -119,6 +119,56 @@ button:hover{ filter:brightness(1.1) }
 .port.port-in .port-dot{ background:linear-gradient(45deg, var(--green), #6bc5b8); box-shadow:0 0 0 3px rgba(139,213,202,0.15) }
 .port.port-out .port-dot{ background:linear-gradient(45deg, var(--yellow), #e6c485); box-shadow:0 0 0 3px rgba(238,212,159,0.15) }
 
+/* Inline input styles */
+.port-inline-input{ 
+  margin-left: 8px; 
+  position: relative;
+  z-index: 10;
+}
+.inline-value-input{ 
+  background: rgba(0,0,0,0.3); 
+  border: 1px solid var(--border); 
+  border-radius: 4px; 
+  color: var(--text); 
+  font-size: 11px; 
+  padding: 3px 6px; 
+  width: 60px; 
+  transition: all 0.15s ease;
+  cursor: text;
+  pointer-events: auto;
+  user-select: text;
+}
+.inline-value-input:hover{ 
+  background: rgba(0,0,0,0.4); 
+  border-color: rgba(122,162,247,0.6);
+}
+.inline-value-input:focus{ 
+  outline: none; 
+  border-color: var(--accent); 
+  box-shadow: 0 0 0 2px rgba(122,162,247,0.2);
+  background: rgba(0,0,0,0.5);
+}
+.inline-value-input[type="checkbox"]{ 
+  width: auto; 
+  height: 14px; 
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.inline-value-input[type="text"]{ 
+  width: 80px; 
+}
+.inline-value-input[type="number"]{ 
+  width: 70px; 
+}
+.inline-value-input::placeholder{ 
+  color: var(--muted); 
+  opacity: 0.7; 
+}
+.inline-value-input::selection {
+  background: var(--accent);
+  color: white;
+}
+
 .block-body{ position:relative }
 .exec{ position:absolute; width:16px; height:16px; border-radius:50%; background:linear-gradient(45deg, var(--red), #e07a9a); border:2px solid rgba(0,0,0,0.3); box-shadow:0 2px 6px rgba(242,143,173,0.4); transition:all 0.15s ease }
 .exec:hover{ transform:scale(1.1); box-shadow:0 3px 8px rgba(242,143,173,0.6) }

@@ -333,7 +333,8 @@ const Variables = {
         variables_input_references: [],
         variables_output_references: [],
         function_name: data.function_name || null,
-        extra_context_string: data.extra_context_string || null
+        extra_context_string: data.extra_context_string || null,
+        inline_values: data.inline_values || {}
       }
 
       // Exec linked list references
@@ -959,6 +960,7 @@ const Variables = {
           variables_output_references: [],
           function_name: data.function_name || null,
           extra_context_string: data.extra_context_string || null,
+          inline_values: data.inline_values || {},
           position: undefined
         }
         // position

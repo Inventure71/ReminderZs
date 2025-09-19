@@ -41,7 +41,9 @@
         function_name: d.function_name || null,
         extra_context_string: d.extra_context_string || null,
         // variable-specific (for Variable blocks): single UID for output variable
-        variable_uid: d.variable_uid || null
+        variable_uid: d.variable_uid || null,
+        // Inline values for unconnected input ports (indexed by port index)
+        inline_values: d.inline_values || {}
       }
     }
 
@@ -92,11 +94,19 @@
       const name = createElement('div', 'port-name', [createText(label || '')])
       const typeEl = createElement('code', 'port-type', [createText(type || '')])
       const dir = createElement('span', 'port-dir', [createText(side.toUpperCase())])
+      
       if (side === 'in') {
         port.appendChild(dot)
         port.appendChild(dir)
         port.appendChild(name)
         port.appendChild(typeEl)
+        
+        // Add inline input field for default types when not connected
+        if (this.#shouldShowInlineInput(type, side, index)) {
+          console.log(`Creating inline input for port ${index}, type: ${type}, side: ${side}`)
+          const inlineInput = this.#createInlineInput(type, index)
+          port.appendChild(inlineInput)
+        }
       } else {
         // out: right side emphasis
         port.appendChild(typeEl)
@@ -105,6 +115,143 @@
         port.appendChild(dot)
       }
       return port
+    }
+    
+    #shouldShowInlineInput(type, side, index) {
+      // Only show for input ports with default types
+      if (side !== 'in') return false
+      
+      const normalizedType = (type || '').toLowerCase()
+      const defaultTypes = ['bool', 'boolean', 'int', 'integer', 'float', 'double', 'number', 'str', 'string', 'any']
+      
+      return defaultTypes.includes(normalizedType)
+    }
+    
+    #createInlineInput(type, index) {
+      console.log(`Creating input element for type: ${type}, index: ${index}`)
+      const wrapper = createElement('div', 'port-inline-input')
+      const input = createElement('input', 'inline-value-input')
+      
+      // Add visual debugging
+      wrapper.style.backgroundColor = 'rgba(255,0,0,0.1)' // Temporary red background
+      wrapper.title = `Inline input for ${type} (index ${index})`
+      
+      const normalizedType = (type || '').toLowerCase()
+      
+      // Set input type and placeholder based on variable type
+      switch (normalizedType) {
+        case 'bool':
+        case 'boolean':
+          input.type = 'checkbox'
+          input.checked = this.data.inline_values[index] === 'true' || this.data.inline_values[index] === true
+          break
+        case 'int':
+        case 'integer':
+          input.type = 'number'
+          input.step = '1'
+          input.placeholder = '0'
+          input.value = this.data.inline_values[index] || ''
+          break
+        case 'float':
+        case 'double':
+        case 'number':
+          input.type = 'number'
+          input.step = 'any'
+          input.placeholder = '0.0'
+          input.value = this.data.inline_values[index] || ''
+          break
+        case 'str':
+        case 'string':
+          input.type = 'text'
+          input.placeholder = '""'
+          input.value = this.data.inline_values[index] || ''
+          break
+        case 'any':
+        default:
+          input.type = 'text'
+          input.placeholder = 'value'
+          input.value = this.data.inline_values[index] || ''
+      }
+      
+      // Prevent dragging from starting when interacting with input
+      input.addEventListener('pointerdown', (e) => { 
+        e.stopPropagation() 
+        // Allow the input to receive focus
+        setTimeout(() => input.focus(), 0)
+      })
+      input.addEventListener('mousedown', (e) => { e.stopPropagation() })
+      input.addEventListener('click', (e) => { 
+        e.stopPropagation()
+        input.focus()
+      })
+      
+      // Ensure input can be selected and edited
+      input.addEventListener('focus', (e) => { e.stopPropagation() })
+      input.addEventListener('keydown', (e) => { e.stopPropagation() })
+      input.addEventListener('keyup', (e) => { e.stopPropagation() })
+      
+      // Update inline value when input changes
+      input.addEventListener('input', (e) => {
+        let value = e.target.value
+        let isValid = true
+        
+        // Type-specific validation and conversion
+        switch (normalizedType) {
+          case 'bool':
+          case 'boolean':
+            value = e.target.checked
+            break
+          case 'int':
+          case 'integer':
+            if (value !== '') {
+              const intVal = parseInt(value, 10)
+              if (isNaN(intVal)) {
+                isValid = false
+                input.style.borderColor = 'var(--red)'
+              } else {
+                value = intVal
+                input.style.borderColor = ''
+              }
+            }
+            break
+          case 'float':
+          case 'double':
+          case 'number':
+            if (value !== '') {
+              const floatVal = parseFloat(value)
+              if (isNaN(floatVal)) {
+                isValid = false
+                input.style.borderColor = 'var(--red)'
+              } else {
+                value = floatVal
+                input.style.borderColor = ''
+              }
+            }
+            break
+          case 'str':
+          case 'string':
+          case 'any':
+            // Strings and any type are always valid
+            input.style.borderColor = ''
+            break
+          default:
+            input.style.borderColor = ''
+        }
+        
+        if (isValid) {
+          this.data.inline_values[index] = value
+          
+          // Dispatch event to notify of value change
+          const event = new CustomEvent('block:inline-value-changed', {
+            bubbles: true,
+            detail: { uid: this.data.uid, index, value, type: normalizedType }
+          })
+          this.el.dispatchEvent(event)
+        }
+      })
+      
+      wrapper.appendChild(input)
+      return wrapper
     }
 
     #renderExecutorPort(kind, key, idx) {
