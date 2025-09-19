@@ -11,7 +11,13 @@
     vars: new Map(),
     // Variables catalogue: varUid → { uid, name, type, value, is_global, global_id, local_id }
     variables: new Map(),
-  }
+  // Available blocks for search
+  availableBlocks: new Map(), // id -> { id, name, type, description, template }
+}
+
+const Variables = {
+  list: [], // { name, type, value, uid, is_global?, global_id?, local_id? }
+}
 
   function addBlockToStore(uid, el, data) {
     Store.blocks.set(uid, { uid, id: data.id, el, data })
@@ -460,34 +466,55 @@
     if (window.blocksApi && typeof window.blocksApi.listFunctions === 'function') {
       window.blocksApi.listFunctions().then((fns) => {
         (fns || []).slice(0, 100).forEach((fn) => {
+          const inputs = (fn.inputs || []).filter(p => !['vararg','varkw'].includes(p.kind)).map(p => p.name)
+          const inputTypes = (fn.inputs || []).filter(p => !['vararg','varkw'].includes(p.kind)).map(p => p.annotation || 'any')
+          const outName = 'result'
+          const outType = fn.output || 'any'
+          
+          // Add to available blocks for search
+          const template = {
+            id: `${fn.module_name}.${fn.name}`,
+            button_class: 'Function',
+            content: fn.docstring || 'Function block',
+            has_input_executor: true,
+            has_output_executor: true,
+            variables_input_nodes: inputs,
+            variables_input_nodes_types: inputTypes,
+            variables_output_nodes: [outName],
+            variables_output_nodes_types: [outType],
+            function_name: `${fn.module_name}.${fn.name}`
+          }
+          
+          Store.availableBlocks.set(`${fn.module_name}.${fn.name}`, {
+            id: `${fn.module_name}.${fn.name}`,
+            name: `${fn.module_name}.${fn.name}`,
+            type: 'function',
+            description: fn.docstring || 'Function block',
+            template: template
+          })
+          
           const el = document.createElement('button')
           el.type = 'button'
           el.className = 'pal-item function'
           el.textContent = `${fn.module_name}.${fn.name}`
           el.title = (fn.docstring || '')
           el.addEventListener('click', () => {
-            const inputs = (fn.inputs || []).filter(p => !['vararg','varkw'].includes(p.kind)).map(p => p.name)
-            const inputTypes = (fn.inputs || []).filter(p => !['vararg','varkw'].includes(p.kind)).map(p => p.annotation || 'any')
-            const outName = 'result'
-            const outType = fn.output || 'any'
-            const view = window.BlockFactory.createFromTemplate('Function', {
-              id: `${fn.module_name}.${fn.name}`,
-              button_class: 'Function',
-              content: fn.docstring || 'Function block',
-              has_input_executor: true,
-              has_output_executor: true,
-              variables_input_nodes: inputs,
-              variables_input_nodes_types: inputTypes,
-              variables_output_nodes: [outName],
-              variables_output_nodes_types: [outType],
-              function_name: `${fn.module_name}.${fn.name}`
-            })
+            const view = window.BlockFactory.createFromTemplate('Function', template)
             view.el.style.left = Math.round(Math.random() * 400 + 40) + 'px'
             view.el.style.top = Math.round(Math.random() * 300 + 40) + 'px'
             content.appendChild(view.el)
             addBlockToStore(view.data.uid, view.el, view.data)
             wireBlockEvents(view.el, canvas)
           })
+
+          // Add drag and drop functionality
+          el.draggable = true
+          el.addEventListener('dragstart', (ev) => {
+            try { 
+              ev.dataTransfer.setData('application/x-block-template', JSON.stringify(template)) 
+            } catch (_) {}
+          })
+
           discoveredList.appendChild(el)
         })
       })
@@ -521,23 +548,268 @@
     })
 
     // Variables panel
-    const Variables = {
-      list: [], // { name, type, value, uid, is_global?, global_id?, local_id? }
+
+    function updateAvailableVariableBlocks() {
+      // Update available blocks with current variables
+      Variables.list.forEach((variable) => {
+        // Add GetVariable block
+        const getKey = `GetVariable_${variable.uid}`
+        Store.availableBlocks.set(getKey, {
+          id: getKey,
+          name: `Get ${variable.name}`,
+          type: 'variable',
+          description: `Get the value of variable '${variable.name}' (${variable.type})`,
+          template: {
+            id: 'Variable',
+            button_class: 'Variable',
+            content: `Variable ${variable.name}`,
+            variable_uid: variable.uid,
+            has_input_executor: false,
+            has_output_executor: false,
+            exec_input_nodes: [],
+            exec_output_nodes: [],
+            variables_input_nodes: [],
+            variables_input_nodes_types: [],
+            variables_output_nodes: ['value'],
+            variables_output_nodes_types: [variable.type || 'any'],
+            variable: variable,
+            function_name: null
+          }
+        })
+
+        // Add SetVariable block
+        const setKey = `SetVariable_${variable.uid}`
+        Store.availableBlocks.set(setKey, {
+          id: setKey,
+          name: `Set ${variable.name}`,
+          type: 'variable',
+          description: `Set the value of variable '${variable.name}' (${variable.type})`,
+          template: {
+            id: 'SetVariable',
+            button_class: 'Variable',
+            content: `Set ${variable.name}`,
+            variable_uid: variable.uid,
+            has_input_executor: true,
+            has_output_executor: true,
+            exec_input_nodes: ['in'],
+            exec_output_nodes: ['out'],
+            variables_input_nodes: ['value'],
+            variables_input_nodes_types: [variable.type || 'any'],
+            variables_output_nodes: [],
+            variables_output_nodes_types: [],
+            variable: variable,
+            function_name: null
+          }
+        })
+      })
     }
 
     function renderVariables() {
+      updateAvailableVariableBlocks() // Update available blocks first
       varsList.innerHTML = ''
       Variables.list.forEach((v) => {
-        const el = document.createElement('div')
-        el.className = 'var-item'
-        el.draggable = true
-        el.innerHTML = `<span class="name">${v.name}</span><span class="type">${v.type || 'any'}</span>`
-        el.addEventListener('dragstart', (e) => {
+        const item = document.createElement('div')
+        item.className = 'var-item'
+        item.dataset.uid = v.uid
+        
+        const varInfo = document.createElement('div')
+        varInfo.className = 'var-info'
+        
+        const name = document.createElement('div')
+        name.className = 'name'
+        name.textContent = v.name
+        
+        const metaRow = document.createElement('div')
+        metaRow.style.display = 'flex'
+        metaRow.style.alignItems = 'center'
+        metaRow.style.gap = '8px'
+        
+        const type = document.createElement('span')
+        type.className = 'type'
+        type.textContent = v.type || 'any'
+        
+        metaRow.appendChild(type)
+        
+        if (v.value !== undefined && v.value !== '') {
+          const value = document.createElement('span')
+          value.className = 'value'
+          value.textContent = String(v.value).slice(0, 20) + (String(v.value).length > 20 ? '...' : '')
+          metaRow.appendChild(value)
+        }
+        
+        varInfo.appendChild(name)
+        varInfo.appendChild(metaRow)
+        
+        const actions = document.createElement('div')
+        actions.style.display = 'flex'
+        actions.style.alignItems = 'center'
+        actions.style.gap = '8px'
+        
+        const deleteBtn = document.createElement('button')
+        deleteBtn.className = 'var-delete-btn'
+        deleteBtn.textContent = '×'
+        deleteBtn.title = 'Delete variable'
+        deleteBtn.style.cssText = 'width:20px;height:20px;border-radius:4px;border:1px solid var(--border);background:rgba(242,143,173,0.1);color:var(--red);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;'
+        
+        const dragHandle = document.createElement('div')
+        dragHandle.className = 'drag-handle'
+        dragHandle.textContent = '⋮⋮'
+        dragHandle.title = 'Drag to canvas'
+        
+        actions.appendChild(deleteBtn)
+        actions.appendChild(dragHandle)
+        
+        item.appendChild(varInfo)
+        item.appendChild(actions)
+        
+        // Delete button functionality
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          deleteVariable(v)
+        })
+        
+        // Click to select/edit
+        item.addEventListener('click', (e) => {
+          if (e.target === dragHandle || e.target === deleteBtn) return
+          // Remove previous selection
+          qsa('.var-item.selected').forEach(el => el.classList.remove('selected'))
+          item.classList.add('selected')
+          showInspectorForVar(v)
+        })
+        
+        // Drag to canvas functionality
+        let isDragging = false
+        dragHandle.addEventListener('pointerdown', (e) => {
+          e.stopPropagation()
+          isDragging = true
+          dragHandle.style.cursor = 'grabbing'
+          
+          const onMove = (moveE) => {
+            if (!isDragging) return
+            // Visual feedback could be added here
+          }
+          
+          const onUp = (upE) => {
+            if (!isDragging) return
+            isDragging = false
+            dragHandle.style.cursor = 'grab'
+            document.removeEventListener('pointermove', onMove)
+            document.removeEventListener('pointerup', onUp)
+            
+            // Check if dropped on canvas
+            const canvas = qs('#canvas')
+            const canvasRect = canvas.getBoundingClientRect()
+            if (upE.clientX >= canvasRect.left && upE.clientX <= canvasRect.right &&
+                upE.clientY >= canvasRect.top && upE.clientY <= canvasRect.bottom) {
+              createVariableBlockFromDrag(v, upE.clientX, upE.clientY)
+            }
+          }
+          
+          document.addEventListener('pointermove', onMove)
+          document.addEventListener('pointerup', onUp)
+        })
+        
+        // Keep legacy drag support
+        item.draggable = true
+        item.addEventListener('dragstart', (e) => {
           e.dataTransfer.setData('application/x-var', JSON.stringify(v))
         })
-        el.addEventListener('click', () => showInspectorForVar(v))
-        varsList.appendChild(el)
+        
+        varsList.appendChild(item)
       })
+    }
+
+    function deleteVariable(variable) {
+      // Find all blocks that reference this variable
+      const relatedBlocks = []
+      for (const [uid, blockData] of Store.blocks.entries()) {
+        const block = blockData.data
+        // Check if this is a Variable block for this variable
+        if (block.button_class === 'Variable' && block.variable_uid === variable.uid) {
+          relatedBlocks.push({ uid, name: block.id || 'Variable Block', type: 'Variable Block' })
+          continue
+        }
+        
+        // Check variable input references
+        if (block.variables_input_references) {
+          for (let i = 0; i < block.variables_input_references.length; i++) {
+            const ref = block.variables_input_references[i]
+            if (ref === variable.uid) {
+              relatedBlocks.push({ uid, name: block.id || 'Block', type: 'Input Connection' })
+              break
+            }
+          }
+        }
+        
+        // Check variable connections in Store.vars
+        for (const [key, targets] of Store.vars.entries()) {
+          const [fromUid] = key.split(':out:')
+          if (fromUid === uid) {
+            for (const target of targets) {
+              const targetBlock = Store.blocks.get(target.toUid)
+              if (targetBlock && targetBlock.data.variables_input_references) {
+                const ref = targetBlock.data.variables_input_references[target.inIndex]
+                if (ref === variable.uid) {
+                  relatedBlocks.push({ uid: target.toUid, name: targetBlock.data.id || 'Block', type: 'Variable Connection' })
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      // Show confirmation dialog
+      let message = `Delete variable "${variable.name}"?`
+      if (relatedBlocks.length > 0) {
+        message += `\n\nThis will also delete ${relatedBlocks.length} related block(s):\n`
+        relatedBlocks.forEach(block => {
+          message += `• ${block.name} (${block.type})\n`
+        })
+      }
+      
+      if (!confirm(message)) return
+      
+      // Remove related blocks
+      relatedBlocks.forEach(block => {
+        const blockData = Store.blocks.get(block.uid)
+        if (blockData && blockData.el) {
+          // Trigger delete event
+          const deleteEvent = new CustomEvent('block:delete', { 
+            bubbles: true, 
+            detail: { uid: block.uid } 
+          })
+          blockData.el.dispatchEvent(deleteEvent)
+        }
+      })
+      
+      // Remove variable from Variables.list
+      const index = Variables.list.findIndex(v => v.uid === variable.uid)
+      if (index >= 0) {
+        Variables.list.splice(index, 1)
+      }
+
+      // Remove variable blocks from available blocks
+      Store.availableBlocks.delete(`GetVariable_${variable.uid}`)
+      Store.availableBlocks.delete(`SetVariable_${variable.uid}`)
+      
+      // Remove from Store.variables if it exists there
+      Store.variables.delete(variable.uid)
+      
+      // Clear inspector if this variable was selected
+      const selectedItem = qs('.var-item.selected')
+      if (selectedItem && selectedItem.dataset.uid === variable.uid) {
+        const inspectorContent = qs('#inspector-content')
+        if (inspectorContent) {
+          inspectorContent.innerHTML = 'Select a variable to edit'
+        }
+      }
+      
+      // Refresh the variables list
+      renderVariables()
+      
+      // Redraw connections
+      const canvas = qs('#canvas')
+      if (canvas) drawConnections(canvas)
     }
 
     function showInspectorForVar(v) {
@@ -669,6 +941,25 @@
       if (!res || !res.ok) console.error('Save failed', res)
     })
 
+    // Context menu search
+    const blockSearch = qs('#block-search')
+    if (blockSearch) {
+      blockSearch.addEventListener('input', (e) => {
+        updateContextMenuResults(e.target.value)
+      })
+      
+      blockSearch.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          hideContextMenu()
+        } else if (e.key === 'Enter') {
+          const firstResult = qs('.context-result-item')
+          if (firstResult) {
+            firstResult.click()
+          }
+        }
+      })
+    }
+
     loadBtn.addEventListener('click', async () => {
       if (!(window.blocksApi && window.blocksApi.backend && window.blocksApi.backend.loadProject)) return
       const res = await window.blocksApi.backend.loadProject()
@@ -683,7 +974,7 @@
       Store.variables.clear()
       Variables.list = Array.isArray(res.data.variables) ? res.data.variables.slice() : []
       Variables.list.forEach((v) => { if (v && v.uid) Store.variables.set(v.uid, v) })
-      renderVariables()
+      renderVariables() // This will also call updateAvailableVariableBlocks()
       // Recreate blocks
       const byUid = new Map()
       ;(res.data.blocks || []).forEach((b) => {
@@ -726,25 +1017,21 @@
       drawConnections(canvas)
     })
 
-    // Allow dropping variable onto canvas to create a Variable block bound to that variable uid
-    canvas.addEventListener('dragover', (e) => {
-      if (e.dataTransfer.types.includes('application/x-var')) e.preventDefault()
-    })
-    canvas.addEventListener('drop', (e) => {
-      const data = e.dataTransfer.getData('application/x-var')
-      if (!data) return
-      e.preventDefault()
-      const v = JSON.parse(data)
-      const view = window.BlockFactory.createFromTemplate('Variable', {
-        id: 'Variable',
-        button_class: 'Variable',
-        content: `Variable ${v.name}`,
-        variable_uid: v.uid,
-        variables_output_nodes: ['value'],
-        variables_output_nodes_types: [v.type || 'any']
-      })
-      const rect = canvas.getBoundingClientRect()
-      // invert current transform to compute content coords
+     // Allow dropping variables and block templates onto canvas
+     canvas.addEventListener('dragover', (e) => {
+       const types = Array.from(e.dataTransfer.types || [])
+       if (types.includes('application/x-var') || types.includes('application/x-block-template')) {
+         e.preventDefault()
+       }
+     })
+     canvas.addEventListener('drop', (e) => {
+       const varData = e.dataTransfer.getData('application/x-var')
+       const tplData = e.dataTransfer.getData('application/x-block-template')
+       if (!varData && !tplData) return
+       e.preventDefault()
+       
+       const rect = canvas.getBoundingClientRect()
+       // invert current transform to compute content coords
       const transform = getComputedStyle(content).transform
       let scale = 1, tx = 0, ty = 0
       if (transform && transform !== 'none') {
@@ -753,11 +1040,33 @@
       }
       const cx = (e.clientX - rect.left - tx) / scale
       const cy = (e.clientY - rect.top - ty) / scale
-      view.el.style.left = (cx - 40) + 'px'
-      view.el.style.top = (cy - 20) + 'px'
-      content.appendChild(view.el)
-      addBlockToStore(view.data.uid, view.el, view.data)
-      wireBlockEvents(view.el, canvas)
+
+      if (tplData) {
+        // Handle block template drop
+        const template = JSON.parse(tplData)
+        const view = window.BlockFactory.createFromTemplate(template.button_class, template)
+        view.el.style.left = (cx - 40) + 'px'
+        view.el.style.top = (cy - 20) + 'px'
+        content.appendChild(view.el)
+        addBlockToStore(view.data.uid, view.el, view.data)
+        wireBlockEvents(view.el, canvas)
+      } else if (varData) {
+        // Handle variable drop
+        const v = JSON.parse(varData)
+        const view = window.BlockFactory.createFromTemplate('Variable', {
+          id: 'Variable',
+          button_class: 'Variable',
+          content: `Variable ${v.name}`,
+          variable_uid: v.uid,
+          variables_output_nodes: ['value'],
+          variables_output_nodes_types: [v.type || 'any']
+        })
+        view.el.style.left = (cx - 40) + 'px'
+        view.el.style.top = (cy - 20) + 'px'
+        content.appendChild(view.el)
+        addBlockToStore(view.data.uid, view.el, view.data)
+        wireBlockEvents(view.el, canvas)
+      }
     })
   }
 
@@ -766,34 +1075,52 @@
       { name: 'Print', cls: 'Function', fn: 'builtins.print', inputs: ['value'], inputTypes: ['any'], out: null, outType: null, content: 'Print value' },
       { name: 'Add', cls: 'Function', fn: 'math_add', inputs: ['a','b'], inputTypes: ['number','number'], out: 'sum', outType: 'number', content: 'Add two numbers' },
       { name: 'Max', cls: 'Function', fn: 'math_max', inputs: ['a','b'], inputTypes: ['number','number'], out: 'max', outType: 'number', content: 'Max of two' },
-      { name: 'Var', cls: 'Variable', fn: null, inputs: [], inputTypes: [], out: 'value', outType: 'any', content: 'Variable source' },
       { name: 'If', cls: 'Conditional', fn: 'flow_if', inputs: ['condition'], inputTypes: ['bool'], out: null, outType: null, content: 'If condition' },
     ]
     builtins.forEach((b) => {
+      // Add to available blocks for search
+      const template = {
+        id: b.fn || b.name,
+        button_class: b.cls,
+        content: b.content,
+        has_input_executor: b.cls !== 'Variable',
+        has_output_executor: b.cls !== 'Variable',
+        variables_input_nodes: b.inputs,
+        variables_input_nodes_types: b.inputTypes,
+        variables_output_nodes: b.out ? [b.out] : (b.cls === 'Variable' ? ['value'] : []),
+        variables_output_nodes_types: b.outType ? [b.outType] : (b.cls === 'Variable' ? ['any'] : []),
+        function_name: b.fn
+      }
+      
+      Store.availableBlocks.set(b.fn || b.name, {
+        id: b.fn || b.name,
+        name: b.name,
+        type: b.cls.toLowerCase(),
+        description: b.content,
+        template: template
+      })
+      
       const el = document.createElement('button')
       el.type = 'button'
       el.className = 'pal-item ' + b.cls.toLowerCase()
       el.textContent = b.name
       el.addEventListener('click', () => {
-        const overrides = {
-          id: b.fn || b.name,
-          button_class: b.cls,
-          content: b.content,
-          has_input_executor: b.cls !== 'Variable',
-          has_output_executor: b.cls !== 'Variable',
-          variables_input_nodes: b.inputs,
-          variables_input_nodes_types: b.inputTypes,
-          variables_output_nodes: b.out ? [b.out] : (b.cls === 'Variable' ? ['value'] : []),
-          variables_output_nodes_types: b.outType ? [b.outType] : (b.cls === 'Variable' ? ['any'] : []),
-          function_name: b.fn
-        }
-        const view = window.BlockFactory.createFromTemplate(b.cls, overrides)
+        const view = window.BlockFactory.createFromTemplate(b.cls, template)
         view.el.style.left = Math.round(Math.random() * 400 + 40) + 'px'
         view.el.style.top = Math.round(Math.random() * 300 + 40) + 'px'
         content.appendChild(view.el)
         addBlockToStore(view.data.uid, view.el, view.data)
         wireBlockEvents(view.el, canvas)
       })
+
+      // Add drag and drop functionality
+      el.draggable = true
+      el.addEventListener('dragstart', (ev) => {
+        try { 
+          ev.dataTransfer.setData('application/x-block-template', JSON.stringify(template)) 
+        } catch (_) {}
+      })
+
       container.appendChild(el)
     })
   }
@@ -858,6 +1185,204 @@
   function wireCanvas(canvas) {
     canvas.addEventListener('pointerup', () => cancelConnection())
     canvas.addEventListener('pointerleave', () => cancelConnection())
+    
+    // Right-click context menu
+    canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      if (e.target === canvas || e.target.id === 'canvas-content') {
+        showContextMenu(e.clientX, e.clientY)
+      }
+    })
+    
+    // Hide context menu on click elsewhere
+    document.addEventListener('click', (e) => {
+      const contextMenu = qs('#context-menu')
+      if (!contextMenu.contains(e.target)) {
+        hideContextMenu()
+      } else if (e.target.closest('.context-result-item')) {
+        // Allow clicks on result items to proceed
+        return
+      }
+    })
+  }
+
+  // Context menu functionality
+  function showContextMenu(x, y) {
+    const contextMenu = qs('#context-menu')
+    const searchInput = qs('#block-search')
+    const results = qs('#context-menu-results')
+    
+    // Position menu
+    contextMenu.style.left = x + 'px'
+    contextMenu.style.top = y + 'px'
+    contextMenu.style.display = 'block'
+    
+    // Store click position for block placement
+    contextMenu._clickX = x
+    contextMenu._clickY = y
+    
+    // Clear and focus search
+    searchInput.value = ''
+    results.innerHTML = ''
+    searchInput.focus()
+    
+    // Show all blocks initially
+    updateContextMenuResults('')
+  }
+
+  function hideContextMenu() {
+    const contextMenu = qs('#context-menu')
+    contextMenu.style.display = 'none'
+  }
+
+  function updateContextMenuResults(query) {
+    const results = qs('#context-menu-results')
+    const lowerQuery = query.toLowerCase()
+    
+    results.innerHTML = ''
+    
+    // Filter and sort blocks from Store.availableBlocks
+    const matches = []
+    for (const [id, blockInfo] of Store.availableBlocks.entries()) {
+      const name = blockInfo.name.toLowerCase()
+      const desc = (blockInfo.description || '').toLowerCase()
+      
+      if (!query || name.includes(lowerQuery) || desc.includes(lowerQuery)) {
+        matches.push({ 
+          ...blockInfo, 
+          score: name.indexOf(lowerQuery) === 0 ? 0 : name.indexOf(lowerQuery) >= 0 ? 1 : 2 
+        })
+      }
+    }
+    
+    matches.sort((a, b) => a.score - b.score || a.name.localeCompare(b.name))
+    
+    // Create result items
+    matches.slice(0, 10).forEach(blockInfo => {
+      const item = document.createElement('div')
+      item.className = 'context-result-item'
+      
+      const badge = document.createElement('div')
+      badge.className = `context-result-badge ${blockInfo.type}`
+      badge.textContent = blockInfo.type
+      
+      const content = document.createElement('div')
+      content.style.flex = '1'
+      
+      const name = document.createElement('div')
+      name.className = 'context-result-name'
+      name.textContent = blockInfo.name
+      
+      content.appendChild(name)
+      
+      if (blockInfo.description) {
+        const desc = document.createElement('div')
+        desc.className = 'context-result-desc'
+        desc.textContent = blockInfo.description
+        content.appendChild(desc)
+      }
+      
+      item.appendChild(badge)
+      item.appendChild(content)
+      
+      item.addEventListener('click', () => {
+        createBlockFromContextMenu(blockInfo)
+        hideContextMenu()
+      })
+      
+      results.appendChild(item)
+    })
+    
+    if (matches.length === 0) {
+      const noResults = document.createElement('div')
+      noResults.className = 'context-result-item'
+      noResults.style.color = 'var(--muted)'
+      noResults.style.fontStyle = 'italic'
+      noResults.textContent = 'No blocks found'
+      results.appendChild(noResults)
+    }
+  }
+
+  function createBlockFromContextMenu(blockInfo) {
+    const contextMenu = qs('#context-menu')
+    const canvas = qs('#canvas')
+    const canvasRect = canvas.getBoundingClientRect()
+    
+    // Convert screen coordinates to canvas coordinates
+    const canvasContent = qs('#canvas-content')
+    const transform = getTransform(canvasContent)
+    
+    const canvasX = (contextMenu._clickX - canvasRect.left - transform.x) / transform.scale
+    const canvasY = (contextMenu._clickY - canvasRect.top - transform.y) / transform.scale
+    
+    // Create block from template
+    const template = blockInfo.template
+    if (template) {
+      const view = window.BlockFactory.createFromTemplate(template.button_class, template)
+      view.el.style.left = canvasX + 'px'
+      view.el.style.top = canvasY + 'px'
+      canvasContent.appendChild(view.el)
+      addBlockToStore(view.data.uid, view.el, view.data)
+      wireBlockEvents(view.el, canvas)
+      
+      // Redraw connections
+      drawConnections(canvas)
+    }
+  }
+
+  // Helper to get canvas transform
+  function getTransform(el) {
+    const style = window.getComputedStyle(el)
+    const transform = style.transform
+    
+    if (transform === 'none') {
+      return { x: 0, y: 0, scale: 1 }
+    }
+    
+    const matrix = transform.match(/matrix\(([^)]+)\)/)
+    if (matrix) {
+      const values = matrix[1].split(',').map(parseFloat)
+      return { x: values[4] || 0, y: values[5] || 0, scale: values[0] || 1 }
+    }
+    
+    return { x: 0, y: 0, scale: 1 }
+  }
+
+  // Create variable block from drag
+  function createVariableBlockFromDrag(variable, screenX, screenY) {
+    const canvas = qs('#canvas')
+    const canvasContent = qs('#canvas-content')
+    const canvasRect = canvas.getBoundingClientRect()
+    const transform = getTransform(canvasContent)
+    
+    // Convert screen coordinates to canvas coordinates
+    const canvasX = (screenX - canvasRect.left - transform.x) / transform.scale
+    const canvasY = (screenY - canvasRect.top - transform.y) / transform.scale
+    
+    // Create variable block
+    const template = {
+      id: 'Var',
+      button_class: 'Variable',
+      content: 'Variable source',
+      has_input_executor: false,
+      has_output_executor: false,
+      variables_input_nodes: [],
+      variables_input_nodes_types: [],
+      variables_output_nodes: ['value'],
+      variables_output_nodes_types: ['any'],
+      function_name: null,
+      variable: variable,
+      variable_uid: variable.uid
+    }
+    
+    const blockView = BlockFactory.create(template)
+    blockView.setPosition(canvasX, canvasY)
+    blockView.render(canvasContent)
+    addBlockToStore(blockView.uid, blockView.el, blockView.data)
+    
+    // Wire events
+    const canvas2 = qs('#canvas')
+    wireBlockEvents(blockView.el, canvas2)
   }
 
 

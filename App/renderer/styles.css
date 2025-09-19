@@ -36,54 +36,88 @@ label input, label select{ width:100%; margin-top:4px; padding:8px; background:#
 .checkbox{ display:flex; align-items:center; gap:6px; margin:0 }
 .compile-bar .checkbox{ color:var(--muted) }
 
-.vars-group{ margin:10px 0 }
-.vars-group h3{ margin:8px 0; font-size:12px; color:var(--muted) }
-.vars-list{ display:flex; flex-direction:column; gap:6px }
-.vars-list .var-item{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 8px; background:#151a2a; border:1px solid var(--border); border-radius:8px; cursor:pointer }
-.vars-list .var-item .name{ font-weight:600 }
-.vars-list .var-item .type{ font-size:12px; color:var(--muted) }
-.var-row{ display:flex; gap:6px }
-.var-row input{ flex:1 }
-.var-row .remove{ width:36px; border-radius:6px; border:1px solid var(--border); background:#1a1f2e; color:var(--muted) }
+.vars-group{ margin:12px 0 }
+.vars-group h3{ margin:10px 0 8px 0; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px }
+.vars-list{ display:flex; flex-direction:column; gap:8px }
+.vars-list .var-item{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:linear-gradient(135deg, #151a2a 0%, #131722 100%); border:1px solid var(--border); border-radius:8px; cursor:pointer; transition:all 0.15s ease; position:relative }
+.vars-list .var-item:hover{ border-color:var(--accent); background:linear-gradient(135deg, #1a1f2e 0%, #171b26 100%); transform:translateY(-1px) }
+.vars-list .var-item.selected{ border-color:var(--accent); box-shadow:0 0 0 2px rgba(122,162,247,0.2) }
+.vars-list .var-item .var-info{ flex:1; min-width:0 }
+.vars-list .var-item .name{ font-weight:600; color:var(--text); font-size:13px; margin-bottom:2px; word-break:break-all }
+.vars-list .var-item .type{ font-size:11px; color:var(--muted); background:rgba(255,255,255,0.05); padding:2px 6px; border-radius:4px; display:inline-block }
+.vars-list .var-item .value{ font-size:11px; color:var(--yellow); margin-left:8px; max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.vars-list .var-item .drag-handle{ color:var(--muted); font-size:12px; opacity:0.6 }
+.vars-list .var-item:hover .drag-handle{ opacity:1 }
+.var-row{ display:flex; gap:8px; align-items:center }
+.var-row input{ flex:1; padding:8px 10px; background:#0d0f14; border:1px solid var(--border); color:var(--text); border-radius:6px; font-size:13px }
+.var-row input:focus{ outline:none; border-color:var(--accent) }
+.var-row .remove{ width:40px; height:36px; border-radius:6px; border:1px solid var(--border); background:#1a1f2e; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center }
+.var-row .remove:hover{ background:rgba(242,143,173,0.2); color:var(--red); border-color:var(--red) }
 
 .actions{ margin-top:12px }
 button{ padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:#1a1f2e; color:var(--text); cursor:pointer }
 button:hover{ filter:brightness(1.1) }
 
-/* Block */
-.block{ position:absolute; min-width:220px; max-width:320px; background:#111524; border:1px solid var(--border); border-radius:10px; box-shadow:0 4px 14px rgba(0,0,0,0.4); user-select:none }
-.block-header{ display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid var(--border); gap:8px }
-.block-title{ font-weight:600 }
+/* Context Menu */
+.context-menu{ position:fixed; background:var(--panel); border:1px solid var(--border); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.5); z-index:1000; min-width:280px; max-width:400px; max-height:400px; overflow:hidden }
+.context-menu-header{ padding:12px; border-bottom:1px solid var(--border) }
+.context-menu-header input{ width:100%; padding:8px 12px; background:#0d0f14; border:1px solid var(--border); color:var(--text); border-radius:6px; font-size:14px }
+.context-menu-header input:focus{ outline:none; border-color:var(--accent) }
+.context-menu-results{ max-height:320px; overflow-y:auto }
+.context-result-item{ padding:10px 12px; cursor:pointer; border-bottom:1px solid rgba(42,47,69,0.5); display:flex; align-items:center; gap:10px }
+.context-result-item:hover{ background:rgba(122,162,247,0.1) }
+.context-result-item:last-child{ border-bottom:none }
+.context-result-badge{ font-size:10px; padding:2px 6px; border-radius:4px; color:#fff; min-width:60px; text-align:center }
+.context-result-badge.executor{ background:var(--accent) }
+.context-result-badge.function{ background:var(--green); color:#141414 }
+.context-result-badge.variable{ background:var(--yellow); color:#141414 }
+.context-result-badge.conditional{ background:var(--purple) }
+.context-result-name{ font-weight:500 }
+.context-result-desc{ font-size:12px; color:var(--muted); margin-top:2px }
+
+/* Block - Improved Design */
+.block{ position:absolute; min-width:240px; max-width:340px; background:linear-gradient(135deg, #111524 0%, #0f1419 100%); border:1px solid var(--border); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3); user-select:none; backdrop-filter:blur(8px); transition:all 0.2s ease }
+.block:hover:not(.dragging){ box-shadow:0 8px 24px rgba(0,0,0,0.6), 0 3px 8px rgba(0,0,0,0.4); transform:translateY(-1px) }
+.block.dragging{ transition:none !important; box-shadow:0 8px 24px rgba(0,0,0,0.6), 0 3px 8px rgba(0,0,0,0.4) }
+.block-header{ display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid rgba(42,47,69,0.6); gap:10px; background:rgba(255,255,255,0.02) }
+.block-title{ font-weight:600; font-size:14px; color:var(--text) }
 .block-right{ display:flex; gap:8px; align-items:center }
-.block-uid{ font-size:10px; color:var(--muted) }
-.block-del{ width:22px; height:22px; border-radius:6px; border:1px solid var(--border); background:#1a1f2e; color:var(--muted); cursor:pointer }
-.badge{ font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); color:var(--muted) }
-.badge.executor{ color:#fff; background:var(--accent) }
-.badge.function{ color:#141414; background:var(--green) }
-.badge.variable{ color:#141414; background:var(--yellow) }
-.badge.conditional{ color:#fff; background:var(--purple) }
-.block-content{ padding:10px 12px; color:var(--muted) }
-.block-body{ display:grid; grid-template-columns: auto 1fr auto; gap:12px; padding:8px 12px 12px 12px; align-items:stretch }
-.block-ports.inputs{ display:flex; flex-direction:column; gap:8px; align-items:flex-start; justify-content:center }
-.block-ports.outputs{ display:flex; flex-direction:column; gap:8px; align-items:flex-end; justify-content:center }
-.port{ position:relative; display:flex; align-items:center; gap:8px; margin:0; padding:4px 6px; border:1px dashed transparent; border-radius:6px }
-.port:hover{ border-color:var(--border) }
-.port-dot{ width:12px; height:12px; border-radius:50%; background:#3b82f6 }
-.port-name{ font-size:12px }
-.port-type{ font-size:11px; color:var(--muted) }
-.port-dir{ font-size:10px; color:var(--muted); letter-spacing:0.5px }
-.port.port-in .port-dot{ background:var(--green); box-shadow:0 0 0 3px rgba(139,213,202,0.25) }
-.port.port-out .port-dot{ background:var(--yellow); box-shadow:0 0 0 3px rgba(238,212,159,0.25) }
+.block-uid{ font-size:10px; color:var(--muted); font-family:ui-monospace, monospace }
+.block-del{ width:24px; height:24px; border-radius:6px; border:1px solid rgba(42,47,69,0.8); background:rgba(26,31,46,0.8); color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:12px }
+.block-del:hover{ background:rgba(242,143,173,0.2); color:var(--red); border-color:var(--red) }
+.badge{ font-size:11px; padding:3px 8px; border-radius:12px; font-weight:500; text-transform:uppercase; letter-spacing:0.5px }
+.badge.executor{ color:#fff; background:linear-gradient(45deg, var(--accent), #5a8cf0); box-shadow:0 2px 8px rgba(122,162,247,0.3) }
+.badge.function{ color:#141414; background:linear-gradient(45deg, var(--green), #6bc5b8); box-shadow:0 2px 8px rgba(139,213,202,0.3) }
+.badge.variable{ color:#141414; background:linear-gradient(45deg, var(--yellow), #e6c485); box-shadow:0 2px 8px rgba(238,212,159,0.3) }
+.badge.conditional{ color:#fff; background:linear-gradient(45deg, var(--purple), #b088e8); box-shadow:0 2px 8px rgba(198,160,246,0.3) }
+.block-content{ padding:12px 14px; color:var(--muted); font-size:13px; line-height:1.4 }
+.block-body{ display:grid; grid-template-columns: auto 1fr auto; gap:16px; padding:10px 14px 14px 14px; align-items:stretch; min-height:60px }
+.block-ports.inputs{ display:flex; flex-direction:column; gap:10px; align-items:flex-start; justify-content:center }
+.block-ports.outputs{ display:flex; flex-direction:column; gap:10px; align-items:flex-end; justify-content:center }
+.port{ position:relative; display:flex; align-items:center; gap:10px; margin:0; padding:6px 8px; border:1px solid transparent; border-radius:8px; transition:all 0.15s ease }
+.port:hover{ border-color:rgba(122,162,247,0.4); background:rgba(122,162,247,0.05) }
+.port-dot{ width:14px; height:14px; border-radius:50%; transition:all 0.15s ease; border:2px solid rgba(0,0,0,0.2) }
+.port-name{ font-size:13px; font-weight:500; color:var(--text) }
+.port-type{ font-size:11px; color:var(--muted); background:rgba(255,255,255,0.05); padding:2px 6px; border-radius:4px }
+.port-dir{ font-size:10px; color:var(--muted); letter-spacing:0.5px; text-transform:uppercase }
+.port.port-in .port-dot{ background:linear-gradient(45deg, var(--green), #6bc5b8); box-shadow:0 0 0 3px rgba(139,213,202,0.15) }
+.port.port-out .port-dot{ background:linear-gradient(45deg, var(--yellow), #e6c485); box-shadow:0 0 0 3px rgba(238,212,159,0.15) }
 
 .block-body{ position:relative }
-.exec{ position:absolute; width:14px; height:14px; border-radius:50%; background:var(--red); border:2px solid rgba(0,0,0,0.4) }
-.exec.in{ left:-7px; top:-7px }
-.exec.out{ right:-7px; top:-7px }
-.exec.out[data-branch="then"]{ right:32px }
-.exec.out[data-branch="else"]{ right:-7px }
-.block-ports.inputs{ padding-top:10px }
-.block-ports.outputs{ padding-top:10px }
-.exec.connecting{ outline:2px dashed var(--red) }
-.port.connecting{ outline:2px dashed var(--accent) }
+.exec{ position:absolute; width:16px; height:16px; border-radius:50%; background:linear-gradient(45deg, var(--red), #e07a9a); border:2px solid rgba(0,0,0,0.3); box-shadow:0 2px 6px rgba(242,143,173,0.4); transition:all 0.15s ease }
+.exec:hover{ transform:scale(1.1); box-shadow:0 3px 8px rgba(242,143,173,0.6) }
+.exec.in{ left:-8px; top:-8px }
+.exec.out{ right:-8px; top:-8px }
+.exec.out[data-branch="then"]{ right:36px }
+.exec.out[data-branch="else"]{ right:-8px }
+.block-ports.inputs{ padding-top:12px }
+.block-ports.outputs{ padding-top:12px }
+.exec.connecting{ outline:2px dashed var(--red); animation:pulse 1s infinite }
+.port.connecting{ outline:2px dashed var(--accent); animation:pulse 1s infinite }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1 }
+  50% { opacity: 0.6 }
+}
 
 

@@ -47,15 +47,31 @@
 
     static constrainByClass(data) {
       if ((data.button_class || '').toLowerCase() === 'variable') {
-        data.has_input_executor = false
-        data.has_output_executor = false
-        data.variables_input_nodes = []
-        data.variables_input_nodes_types = []
-        // ensure exactly one output var
-        const name = data.variables_output_nodes && data.variables_output_nodes[0] ? data.variables_output_nodes[0] : 'value'
-        const type = data.variables_output_nodes_types && data.variables_output_nodes_types[0] ? data.variables_output_nodes_types[0] : 'any'
-        data.variables_output_nodes = [name]
-        data.variables_output_nodes_types = [type]
+        // Check if it's a SetVariable block
+        const isSet = String(data.id || '').toLowerCase() === 'setvariable'
+        
+        if (isSet) {
+          // Set Variable: has exec in/out, one variable input, no variable outputs
+          data.has_input_executor = true
+          data.has_output_executor = true
+          data.exec_input_nodes = Array.isArray(data.exec_input_nodes) && data.exec_input_nodes.length ? data.exec_input_nodes : ['in']
+          data.exec_output_nodes = Array.isArray(data.exec_output_nodes) && data.exec_output_nodes.length ? data.exec_output_nodes : ['out']
+          data.variables_input_nodes = ['value']
+          data.variables_input_nodes_types = [(data.variables_input_nodes_types && data.variables_input_nodes_types[0]) || 'any']
+          data.variables_output_nodes = []
+          data.variables_output_nodes_types = []
+        } else {
+          // Get Variable: no exec pins, single variable output
+          data.has_input_executor = false
+          data.has_output_executor = false
+          data.variables_input_nodes = []
+          data.variables_input_nodes_types = []
+          // ensure exactly one output var
+          const name = data.variables_output_nodes && data.variables_output_nodes[0] ? data.variables_output_nodes[0] : 'value'
+          const type = data.variables_output_nodes_types && data.variables_output_nodes_types[0] ? data.variables_output_nodes_types[0] : 'any'
+          data.variables_output_nodes = [name]
+          data.variables_output_nodes_types = [type]
+        }
       }
       return data
     }
@@ -184,36 +200,76 @@
       const onPointerDown = (e) => {
         if (e.button !== 0) return
         isDragging = true
+        el.classList.add('dragging')
         el.setPointerCapture(e.pointerId)
         startX = e.clientX
         startY = e.clientY
-        const rect = el.getBoundingClientRect()
-        const parentRect = el.parentElement.getBoundingClientRect()
-        startLeft = rect.left - parentRect.left
-        startTop = rect.top - parentRect.top
+        
+        // Get current position directly from CSS (already in canvas coordinates)
+        startLeft = parseFloat(el.style.left) || 0
+        startTop = parseFloat(el.style.top) || 0
       }
 
       const onPointerMove = (e) => {
         if (!isDragging) return
-        const dx = e.clientX - startX
-        const dy = e.clientY - startY
+        
+        // Get canvas transform to account for zoom/pan
+        const canvasContent = el.parentElement
+        const transform = getCanvasTransform(canvasContent)
+        
+        // Calculate movement in canvas space (accounting for scale)
+        const dx = (e.clientX - startX) / transform.scale
+        const dy = (e.clientY - startY) / transform.scale
+        
         const left = startLeft + dx
         const top = startTop + dy
         el.style.left = `${left}px`
         el.style.top = `${top}px`
+        
         // notify canvas for connection line updates
         const ev = new CustomEvent('block:moved', { bubbles: true, detail: { id: this.data.id || '', left, top } })
         el.dispatchEvent(ev)
       }
+      
+      // Helper function to get canvas transform
+      function getCanvasTransform(el) {
+        const style = window.getComputedStyle(el)
+        const transform = style.transform
+        
+        if (transform === 'none') {
+          return { x: 0, y: 0, scale: 1 }
+        }
+        
+        const matrix = transform.match(/matrix\(([^)]+)\)/)
+        if (matrix) {
+          const values = matrix[1].split(',').map(parseFloat)
+          return { x: values[4] || 0, y: values[5] || 0, scale: values[0] || 1 }
+        }
+        
+        return { x: 0, y: 0, scale: 1 }
+      }
 
       const onPointerUp = (e) => {
         isDragging = false
+        el.classList.remove('dragging')
         try { el.releasePointerCapture(e.pointerId) } catch (_) {}
       }
 
       el.addEventListener('pointerdown', onPointerDown)
       window.addEventListener('pointermove', onPointerMove)
       window.addEventListener('pointerup', onPointerUp)
+    }
+
+    setPosition(x, y) {
+      this.el.style.left = `${x}px`
+      this.el.style.top = `${y}px`
+    }
+
+    render(parent) {
+      if (parent) {
+        parent.appendChild(this.el)
+      }
+      return this.el
     }
   }
 

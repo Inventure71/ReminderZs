@@ -44,6 +44,14 @@
       </main>
     </div>
 
+    <!-- Right-click context menu for block search -->
+    <div id="context-menu" class="context-menu" style="display: none;">
+      <div class="context-menu-header">
+        <input type="text" id="block-search" placeholder="Search blocks..." autocomplete="off">
+      </div>
+      <div id="context-menu-results" class="context-menu-results"></div>
+    </div>
+
     <script src="./components/Block.js"></script>
     <script src="./modules/blocks/registry.js"></script>
     <script src="./modules/blocks/factory.js"></script>

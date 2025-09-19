@@ -242,6 +242,14 @@ if __name__ == "__main__":
                 call_line = function_call_line(blk)
                 if call_line:
                     lines.append(' ' * indent + call_line)
+            elif cls == 'variable' and (blk.get('id') or '').lower() == 'setvariable':
+                # Handle SetVariable blocks
+                var_info = blk.get('variable') or {}
+                var_uid = var_info.get('uid') or blk.get('variable_uid')
+                if var_uid and var_uid in var_uid_to_symbol:
+                    var_symbol = var_uid_to_symbol[var_uid]
+                    value_expr = resolve_input_expr(blk, 0)  # Get value from first input
+                    lines.append(' ' * indent + f"{var_symbol} = {value_expr}")
             # Variables produce declarations earlier; skip here
             # Move to default 'out' or first available exec out
             next_uid = None
