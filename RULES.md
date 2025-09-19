@@ -7,7 +7,7 @@ Each block emitted by the UI must include these fields:
 
 - id: string – block class/type identifier (e.g., "Function", fully qualified function name, or a custom name)
 - uid: string – globally unique ID for this block instance
-- button_class: "Executor" | "Function" | "Variable" | "Conditional"
+- button_class: "Executor" | "Function" | "Variable" | "Conditional" | "Operator"
 - has_input_executor: boolean
 - has_output_executor: boolean
 - exec_input_nodes: string[] – ordered list of exec input port keys (N inputs)
@@ -29,6 +29,7 @@ Each block emitted by the UI must include these fields:
 - exec_in_refs: { [inKey: string]: fromUid } – reverse mapping (optional; informational)
 - function_name: string | null – fully qualified function name for `Function` blocks (e.g., "package.module.func" or "builtins.print")
 - extra_context_string: string | null – free-form note
+- inline_values: object – stores direct input values for unconnected ports, indexed by port position (e.g., {"0": "hello", "1": 42})
 - variable: object | undefined – for `Variable` blocks only
   - name: string
   - type: string
@@ -50,11 +51,15 @@ Example – standardized references for a 2-arg function print(a, b):
     null
   ],
   "variables_output_nodes": [],
-  "variables_output_references": []
+  "variables_output_references": [],
+  "inline_values": {
+    "1": "Hello World!"
+  }
 }
 ```
 
 If only b is connected: `[null, "<var-uid>"]`. Always one entry per input; null means unconnected.
+If parameter b has an inline value: `inline_values: {"1": "Hello World!"}` (indexed by port position).
 
 For outputs: one entry per output. Each entry is null or an array of target refs.
 
@@ -78,6 +83,12 @@ For outputs: one entry per output. Each entry is null or an array of target refs
   - Used for flow control
   - A special `BeginPlay` Executor is always present; compile considers only blocks reachable from it
 
+- Operator
+  - exec_input_nodes = [], exec_output_nodes = [] (no execution flow)
+  - Pure computation blocks (add, subtract, compare, logic operations)
+  - `function_name` like "operator.add", "operator.eq", etc.
+  - Processed as dependencies when other blocks reference their outputs
+
 Connection cardinality:
 - Exec outputs: max 1 active connection per output key
 - Exec inputs: max 1 incoming connection
@@ -93,10 +104,16 @@ Connection cardinality:
 - Infinite canvas with pan (drag background or RMB/MMB) and wheel-zoom around cursor
 - Blocks are appended under `#canvas-content` and transformed via CSS `translate(x,y) scale(s)`
 - Connection lines are rendered in an overlay SVG and recomputed on pan/zoom/drag
+- **Multi-Selection**:
+  - Ctrl+Click: Select/deselect individual blocks
+  - Ctrl+Drag: Area selection with visual rectangle
+  - Coordinated movement: drag any selected block to move all together
+- **Inline Values**: Input ports with default types (bool, int, float, string, any) show input fields for direct value entry
 - Pins
   - Exec inputs on the left, vertically stacked
   - Exec outputs on the right, vertically stacked
   - Variable inputs on the left, variable outputs on the right; all vertically aligned
+  - Inline input fields appear next to variable input ports when type is supported
 
 ### 5) Premade Blocks & Discovery
 - Built-in examples: Print, Add, Max, Var, If
@@ -104,13 +121,17 @@ Connection cardinality:
 - For each discovered function, a premade `Function` block is generated with ordered inputs (excluding *args/**kwargs markers) and one output named `result` (or type-derived).
 
 ### 6) IPC Bridge & Python Execution
+- **Compile Button**: Located in top-right topbar with gradient styling and play icon
+- **Debug Window**: Floating window with tabs for "Output" (JSON + status + Python output) and "Generated Script"
+- **Window Controls**: Minimize/close buttons; reopens automatically on compile
 - Compile button collects the current canvas into the standardized JSON and calls `backend:generate`
 - Main process spawns the Python script:
   - Preferred: `conda run -n RemainderV0 python App/main.py '<json>'`
   - Fallback: `python3 App/main.py '<json>'` if conda/env is unavailable
   - Kills any previously running backend process before starting a new one
   - Passes `PYTHONUNBUFFERED=1` and optionally `PY_DEBUG=1` (see Debugging)
-- Python stdout/stderr are shown in the UI compile panel
+- Output tab shows: JSON conversion result, execution status, Python stdout/stderr
+- Generated Script tab shows: the actual Python code created from blocks
 
 ### 7) Debugging Python
 - When `PY_DEBUG=1`, `App/main.py` starts a `debugpy` server on `127.0.0.1:5678` and waits for a client
@@ -121,17 +142,21 @@ Connection cardinality:
 - Steps:
   1) Build a map of variables (UID → symbol), emit top-level variable declarations with defaults (and type hints)
   2) Walk the execution graph from `BeginPlay` following `exec_out_refs` in order. When encountering a `Conditional`, generate `if/else` and recursively traverse both branches
-  3) For each `Function` block, resolve inputs from `variables_input_references` in order:
+  3) For each `Function` block, resolve inputs from `variables_input_references` or `inline_values` in order:
      - variable UID → variable symbol (cast to expected input type if annotated as str | int | float | bool)
      - upstream output ref `fromUid:out:index` → symbol produced by that function output (no casting applied)
-     - null → `None`
-  4) Emit imports for `modules.<pkg>.<func>`; call `builtins.<name>` directly
-  5) Emit assignment for outputs, one symbol per output in order
-  6) For custom functions without a known module, create a stub file under `App/modules/<name>.py` containing the block metadata
+     - null → check `inline_values[index]` for direct value, otherwise `None`
+  4) **Inline Values**: When no connection exists, use value from `inline_values` object (indexed by port position)
+  5) **Conditional Branches**: Empty branches generate `pass` or are omitted entirely
+  6) Emit imports for `modules.<pkg>.<func>`; call `builtins.<name>` directly
+  7) Emit assignment for outputs, one symbol per output in order
+  8) For custom functions without a known module, create a stub file under `App/modules/<name>.py` containing the block metadata
 - Only blocks reachable (directly or indirectly) from `BeginPlay` are included. Variable-only sources feeding included blocks are also included.
 
-Variable defaults:
-- If a variable’s default value is a numeric‑looking string (integer/float/scientific), it is emitted as a numeric literal instead of a quoted string.
+Variable defaults and inline values:
+- Numeric‑looking strings (integer/float/scientific) are emitted as numeric literals
+- Boolean strings ("true"/"false") become Python `True`/`False`
+- Inline values are type-validated and converted appropriately
 
 ### 9) UIDs & References
 - Every block has a unique `uid`
@@ -148,8 +173,26 @@ Variable defaults:
 
 ### 12) Save/Load Projects
 - Save writes JSON containing:
-  - blocks: full graph with positions `{ position: { x, y } }`, all refs, function_name, and for Variable blocks the `variable` object and `variable_uid`
+  - blocks: full graph with positions `{ position: { x, y } }`, all refs, function_name, `inline_values`, and for Variable blocks the `variable` object and `variable_uid`
   - variables: sidebar variable catalog (name, type, value, uid, global/local flags)
-- Load clears the canvas, restores variables in the sidebar, recreates all blocks at saved positions, rebinds exec and variable edges, then redraws connections.
+- Load clears the canvas, restores variables in the sidebar, recreates all blocks at saved positions, restores inline values, rebinds exec and variable edges, then redraws connections.
+
+### 13) Multi-Selection System
+- **Selection State**: Maintained in `Store.selectedBlocks` (Set of block UIDs)
+- **Visual Feedback**: Selected blocks get blue accent border and glow effect
+- **Area Selection**: Ctrl+drag creates selection rectangle; all overlapping blocks are selected
+- **Individual Selection**: Ctrl+click toggles block selection (additive)
+- **Coordinated Movement**: Dragging any selected block moves all selected blocks together
+- **Clear Selection**: Click empty canvas without Ctrl modifier
+- **State Management**: Selection persists during canvas operations (pan/zoom)
+
+### 14) Inline Value System
+- **Supported Types**: bool (checkbox), int (number), float (number), string (text), any (text)
+- **UI Integration**: Input fields appear next to variable input ports automatically
+- **Data Storage**: Values stored in `inline_values` object, indexed by port position
+- **Priority**: Inline values used only when no connection exists (`variables_input_references[i] === null`)
+- **Validation**: Type-specific validation with visual feedback (red border for invalid input)
+- **Event Isolation**: Input interactions don't interfere with block dragging
+- **Save/Load**: Inline values preserved in project files
 
 
