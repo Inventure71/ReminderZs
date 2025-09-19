@@ -72,6 +72,13 @@
           data.variables_output_nodes = [name]
           data.variables_output_nodes_types = [type]
         }
+      } else if ((data.button_class || '').toLowerCase() === 'operator') {
+        // Operators: no exec pins, only variable inputs and outputs
+        data.has_input_executor = false
+        data.has_output_executor = false
+        data.exec_input_nodes = []
+        data.exec_output_nodes = []
+        // Keep variable inputs and outputs as defined
       }
       return data
     }
@@ -199,6 +206,31 @@
 
       const onPointerDown = (e) => {
         if (e.button !== 0) return
+        
+        // Handle Ctrl+click for selection
+        if (e.ctrlKey || e.metaKey) {
+          e.stopPropagation()
+          const uid = this.data.uid
+          if (window.Store && window.Store.selectedBlocks) {
+            if (window.Store.selectedBlocks.has(uid)) {
+              window.deselectBlock(uid)
+            } else {
+              window.selectBlock(uid, true) // Add to selection
+            }
+          }
+          return
+        }
+        
+        // Handle selection for dragging
+        const uid = this.data.uid
+        if (window.Store && window.Store.selectedBlocks) {
+          if (!window.Store.selectedBlocks.has(uid)) {
+            // If this block is not selected, select only this block
+            window.selectBlock(uid, false)
+          }
+          // If already selected, keep the current selection for multi-drag
+        }
+        
         isDragging = true
         el.classList.add('dragging')
         el.setPointerCapture(e.pointerId)
@@ -221,13 +253,43 @@
         const dx = (e.clientX - startX) / transform.scale
         const dy = (e.clientY - startY) / transform.scale
         
-        const left = startLeft + dx
-        const top = startTop + dy
-        el.style.left = `${left}px`
-        el.style.top = `${top}px`
+        // Move all selected blocks together
+        if (window.Store && window.Store.selectedBlocks.size > 1) {
+          // Store initial positions of all blocks if not already stored
+          if (!this._initialPositions) {
+            this._initialPositions = new Map()
+            for (const uid of window.Store.selectedBlocks) {
+              const blockInfo = window.Store.blocks.get(uid)
+              if (blockInfo && blockInfo.el) {
+                const blockEl = blockInfo.el
+                this._initialPositions.set(uid, {
+                  left: parseFloat(blockEl.style.left) || 0,
+                  top: parseFloat(blockEl.style.top) || 0
+                })
+              }
+            }
+          }
+          
+          // Move all blocks by the same delta from their initial positions
+          for (const uid of window.Store.selectedBlocks) {
+            const blockInfo = window.Store.blocks.get(uid)
+            const initialPos = this._initialPositions.get(uid)
+            if (blockInfo && blockInfo.el && initialPos) {
+              const blockEl = blockInfo.el
+              blockEl.style.left = `${initialPos.left + dx}px`
+              blockEl.style.top = `${initialPos.top + dy}px`
+            }
+          }
+        } else {
+          // Single block movement
+          const left = startLeft + dx
+          const top = startTop + dy
+          el.style.left = `${left}px`
+          el.style.top = `${top}px`
+        }
         
         // notify canvas for connection line updates
-        const ev = new CustomEvent('block:moved', { bubbles: true, detail: { id: this.data.id || '', left, top } })
+        const ev = new CustomEvent('block:moved', { bubbles: true, detail: { id: this.data.id || '' } })
         el.dispatchEvent(ev)
       }
       
@@ -252,6 +314,8 @@
       const onPointerUp = (e) => {
         isDragging = false
         el.classList.remove('dragging')
+        // Clean up initial positions for multi-block movement
+        this._initialPositions = null
         try { el.releasePointerCapture(e.pointerId) } catch (_) {}
       }
 

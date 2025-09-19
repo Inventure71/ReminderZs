@@ -78,6 +78,18 @@
       variables_output_nodes: [],
       variables_output_nodes_types: []
     })
+
+    registerTemplate('Operator', {
+      content: 'Operator block',
+      has_input_executor: false,
+      has_output_executor: false,
+      exec_input_nodes: [],
+      exec_output_nodes: [],
+      variables_input_nodes: ['a', 'b'],
+      variables_input_nodes_types: ['any', 'any'],
+      variables_output_nodes: ['result'],
+      variables_output_nodes_types: ['any']
+    })
   }
 
   registerDefaults()

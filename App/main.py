@@ -37,6 +37,9 @@ if __name__ == "__main__":
         if isinstance(v, str):
             s = v.strip()
             if s:
+                # boolean
+                if s.lower() in ('true', 'false'):
+                    return s.capitalize()  # True or False
                 # integer
                 if re.fullmatch(r"[+-]?\d+", s):
                     try:
@@ -60,11 +63,23 @@ if __name__ == "__main__":
     var_uid_to_symbol: Dict[str, str] = {}
     var_decls: List[str] = []
     used_symbols: Set[str] = set()
+    processed_var_uids: Set[str] = set()  # Track which variable UIDs we've already processed
 
     for b in blocks:
         if (b.get('button_class') or '').lower() == 'variable':
             # Prefer variable info from JSON; fallback to catalog if needed
             vinfo = b.get('variable') or {}
+            var_value_uid = vinfo.get('uid') or b.get('variable_uid')
+            
+            # Skip if we've already processed this variable UID
+            if var_value_uid and var_value_uid in processed_var_uids:
+                # Just map this block UID to the existing symbol
+                var_block_uid = b.get('uid')
+                if var_block_uid and var_value_uid in var_uid_to_symbol:
+                    var_uid_to_symbol[var_block_uid] = var_uid_to_symbol[var_value_uid]
+                continue
+            
+            # Create new symbol for this variable
             base = sanitize_ident(vinfo.get('name') or 'var')
             sym = base
             i = 2
@@ -72,13 +87,14 @@ if __name__ == "__main__":
                 sym = f"{base}_{i}"
                 i += 1
             used_symbols.add(sym)
+            
             var_block_uid = b.get('uid')
-            var_value_uid = vinfo.get('uid') or b.get('variable_uid')
             # Map both the block uid and the variable uid to the same symbol
             if var_block_uid:
                 var_uid_to_symbol[var_block_uid] = sym
             if var_value_uid:
                 var_uid_to_symbol[var_value_uid] = sym
+                processed_var_uids.add(var_value_uid)
             # include type hint if available (normalize 'any' → 'Any')
             vtype_raw = vinfo.get('type') or 'Any'
             vtype = 'Any' if isinstance(vtype_raw, str) and vtype_raw.lower() == 'any' else vtype_raw
@@ -150,7 +166,8 @@ if __name__ == "__main__":
         Produce a single line assigning function outputs.
         Returns the code line or None if not applicable.
         """
-        if (block.get('button_class') or '').lower() != 'function':
+        cls = (block.get('button_class') or '').lower()
+        if cls not in ['function', 'operator']:
             return None
         fn = block.get('function_name')
         # Build argument list from input variables (attempt basic casting for variables to expected input types)
@@ -184,7 +201,26 @@ if __name__ == "__main__":
 
         # Map function import
         call = None
-        if isinstance(fn, str) and '.' in fn and not fn.startswith('builtins.'):
+        if isinstance(fn, str) and fn.startswith('operator.'):
+            # Handle operator functions with Python operators
+            op_name = fn.split('.', 1)[1]
+            if op_name == 'eq' and len(args_list) >= 2:
+                call = f"({args_list[0]} == {args_list[1]})"
+            elif op_name == 'gt' and len(args_list) >= 2:
+                call = f"({args_list[0]} > {args_list[1]})"
+            elif op_name == 'lt' and len(args_list) >= 2:
+                call = f"({args_list[0]} < {args_list[1]})"
+            elif op_name == 'not_' and len(args_list) >= 1:
+                call = f"(not {args_list[0]})"
+            elif op_name == 'or_' and len(args_list) >= 2:
+                call = f"({args_list[0]} or {args_list[1]})"
+            elif op_name == 'and_' and len(args_list) >= 2:
+                call = f"({args_list[0]} and {args_list[1]})"
+            else:
+                # Fallback to operator module
+                imports.add("import operator")
+                call = f"operator.{op_name}({args})"
+        elif isinstance(fn, str) and '.' in fn and not fn.startswith('builtins.'):
             mod, _, name = fn.rpartition('.')
             imports.add(f"from modules.{mod} import {name}")
             call = f"{name}({args})"
@@ -231,14 +267,32 @@ if __name__ == "__main__":
                 # compute condition expr (first var input)
                 cond = resolve_input_expr(blk, 0)
                 lines.append(' ' * indent + f"if {cond}:")
+                
+                # Generate then branch
                 then_uid = (exec_out.get(cur) or {}).get('then')
+                then_start_line_count = len(lines)
                 gen_branch(then_uid, indent + 4)
-                lines.append(' ' * indent + "else:")
+                then_has_content = len(lines) > then_start_line_count
+                
+                # Add pass if then branch is empty
+                if not then_has_content:
+                    lines.append(' ' * (indent + 4) + "pass")
+                
+                # Generate else branch only if there's something connected
                 else_uid = (exec_out.get(cur) or {}).get('else')
-                gen_branch(else_uid, indent + 4)
+                if else_uid and else_uid in uid_to_block:
+                    lines.append(' ' * indent + "else:")
+                    else_start_line_count = len(lines)
+                    gen_branch(else_uid, indent + 4)
+                    else_has_content = len(lines) > else_start_line_count
+                    
+                    # Add pass if else branch is empty
+                    if not else_has_content:
+                        lines.append(' ' * (indent + 4) + "pass")
+                
                 # stop linear flow after handling branches
                 return
-            elif cls == 'function':
+            elif cls == 'function' or cls == 'operator':
                 call_line = function_call_line(blk)
                 if call_line:
                     lines.append(' ' * indent + call_line)
@@ -261,7 +315,64 @@ if __name__ == "__main__":
                 next_uid = next((refs[k] for k in refs if k), None)
             cur = next_uid
 
-    # First, generate code lines by walking from Begin Play (populates imports)
+    # First, do a pass to identify all reachable blocks (including operators)
+    reachable_blocks = set()
+    def find_reachable_blocks(start_uid: Optional[str]):
+        """Find all blocks reachable from start_uid (including operators via variable connections)"""
+        if not start_uid or start_uid in reachable_blocks or start_uid not in uid_to_block:
+            return
+        reachable_blocks.add(start_uid)
+        
+        block = uid_to_block[start_uid]
+        
+        # Follow execution connections
+        refs = exec_out.get(start_uid) or {}
+        for next_uid in refs.values():
+            if next_uid:
+                find_reachable_blocks(next_uid)
+        
+        # Follow variable input connections to find operators
+        var_refs = block.get('variables_input_references') or []
+        for ref in var_refs:
+            if isinstance(ref, str) and ':out:' in ref:
+                from_uid, _ = ref.split(':out:', 1)
+                find_reachable_blocks(from_uid)
+    
+    # Find all reachable blocks starting from BeginPlay
+    for start in begins or []:
+        find_reachable_blocks(start)
+    
+    # Process operators first (in dependency order)
+    processed_operators = set()
+    def process_operators_for_block(block_uid: str):
+        """Process all operators that feed into this block"""
+        if block_uid not in uid_to_block or block_uid in processed_operators:
+            return
+        block = uid_to_block[block_uid]
+        
+        # First, recursively process operators that this block depends on
+        refs = block.get('variables_input_references') or []
+        for ref in refs:
+            if isinstance(ref, str) and ':out:' in ref:
+                from_uid, _ = ref.split(':out:', 1)
+                if from_uid in uid_to_block:
+                    source_block = uid_to_block[from_uid]
+                    if (source_block.get('button_class') or '').lower() == 'operator':
+                        process_operators_for_block(from_uid)
+        
+        # Then process this block if it's an operator
+        if (block.get('button_class') or '').lower() == 'operator':
+            processed_operators.add(block_uid)
+            call_line = function_call_line(block)
+            if call_line:
+                lines.append(call_line)
+    
+    # Process all reachable operators
+    for uid in reachable_blocks:
+        if uid in uid_to_block:
+            process_operators_for_block(uid)
+    
+    # Then, generate code lines by walking from Begin Play (populates imports)
     for start in begins or []:
         gen_branch(start, 0)
 

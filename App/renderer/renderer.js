@@ -11,9 +11,12 @@
     vars: new Map(),
     // Variables catalogue: varUid → { uid, name, type, value, is_global, global_id, local_id }
     variables: new Map(),
-  // Available blocks for search
-  availableBlocks: new Map(), // id -> { id, name, type, description, template }
-}
+    // Available blocks for search
+    availableBlocks: new Map(), // id -> { id, name, type, description, template }
+    // Multi-selection state
+    selectedBlocks: new Set(), // Set of block UIDs
+    selectionBox: null, // { startX, startY, endX, endY } for area selection
+  }
 
 const Variables = {
   list: [], // { name, type, value, uid, is_global?, global_id?, local_id? }
@@ -48,6 +51,89 @@ const Variables = {
       if (changed && setRef.size === 0) {
         Store.vars.delete(key)
       }
+    }
+  }
+
+  // Multi-selection helper functions
+  function selectBlock(uid, addToSelection = false) {
+    if (!addToSelection) {
+      clearSelection()
+    }
+    Store.selectedBlocks.add(uid)
+    updateBlockVisualSelection(uid, true)
+  }
+  
+  // Expose functions globally for Block.js
+  window.selectBlock = selectBlock
+  window.deselectBlock = deselectBlock
+  window.clearSelection = clearSelection
+  window.Store = Store
+
+  function deselectBlock(uid) {
+    Store.selectedBlocks.delete(uid)
+    updateBlockVisualSelection(uid, false)
+  }
+
+  function clearSelection() {
+    for (const uid of Store.selectedBlocks) {
+      updateBlockVisualSelection(uid, false)
+    }
+    Store.selectedBlocks.clear()
+  }
+
+  function updateBlockVisualSelection(uid, selected) {
+    const blockInfo = Store.blocks.get(uid)
+    if (blockInfo && blockInfo.el) {
+      if (selected) {
+        blockInfo.el.classList.add('selected')
+      } else {
+        blockInfo.el.classList.remove('selected')
+      }
+    }
+  }
+
+  function isBlockInSelectionBox(blockEl, box) {
+    const rect = blockEl.getBoundingClientRect()
+    const canvas = document.getElementById('canvas')
+    const canvasRect = canvas.getBoundingClientRect()
+    const canvasContent = document.getElementById('canvas-content')
+    const transform = getTransform(canvasContent)
+    
+    // Convert block position to canvas coordinates
+    const blockLeft = (rect.left - canvasRect.left - transform.x) / transform.scale
+    const blockTop = (rect.top - canvasRect.top - transform.y) / transform.scale
+    const blockRight = blockLeft + rect.width / transform.scale
+    const blockBottom = blockTop + rect.height / transform.scale
+    
+    // Check if block overlaps with selection box
+    return !(blockRight < Math.min(box.startX, box.endX) || 
+             blockLeft > Math.max(box.startX, box.endX) || 
+             blockBottom < Math.min(box.startY, box.endY) || 
+             blockTop > Math.max(box.startY, box.endY))
+  }
+
+  function updateSelectionBox(box) {
+    let selectionBoxEl = document.getElementById('selection-box')
+    if (!selectionBoxEl) {
+      selectionBoxEl = document.createElement('div')
+      selectionBoxEl.id = 'selection-box'
+      selectionBoxEl.className = 'selection-box'
+      document.getElementById('canvas-content').appendChild(selectionBoxEl)
+    }
+    
+    if (box) {
+      const left = Math.min(box.startX, box.endX)
+      const top = Math.min(box.startY, box.endY)
+      const width = Math.abs(box.endX - box.startX)
+      const height = Math.abs(box.endY - box.startY)
+      
+      selectionBoxEl.style.left = left + 'px'
+      selectionBoxEl.style.top = top + 'px'
+      selectionBoxEl.style.width = width + 'px'
+      selectionBoxEl.style.height = height + 'px'
+      selectionBoxEl.style.display = 'block'
+    } else {
+      selectionBoxEl.style.display = 'none'
     }
   }
 
@@ -1077,6 +1163,17 @@ const Variables = {
       { name: 'Max', cls: 'Function', fn: 'math_max', inputs: ['a','b'], inputTypes: ['number','number'], out: 'max', outType: 'number', content: 'Max of two' },
       { name: 'If', cls: 'Conditional', fn: 'flow_if', inputs: ['condition'], inputTypes: ['bool'], out: null, outType: null, content: 'If condition' },
     ]
+
+    const operators = [
+      { name: 'Equal', cls: 'Operator', fn: 'operator.eq', inputs: ['a', 'b'], inputTypes: ['any', 'any'], out: 'result', outType: 'bool', content: 'Equal comparison' },
+      { name: 'Greater', cls: 'Operator', fn: 'operator.gt', inputs: ['a', 'b'], inputTypes: ['any', 'any'], out: 'result', outType: 'bool', content: 'Greater than' },
+      { name: 'Smaller', cls: 'Operator', fn: 'operator.lt', inputs: ['a', 'b'], inputTypes: ['any', 'any'], out: 'result', outType: 'bool', content: 'Less than' },
+      { name: 'Not', cls: 'Operator', fn: 'operator.not_', inputs: ['value'], inputTypes: ['bool'], out: 'result', outType: 'bool', content: 'Logical NOT' },
+      { name: 'Or', cls: 'Operator', fn: 'operator.or_', inputs: ['a', 'b'], inputTypes: ['bool', 'bool'], out: 'result', outType: 'bool', content: 'Logical OR' },
+      { name: 'And', cls: 'Operator', fn: 'operator.and_', inputs: ['a', 'b'], inputTypes: ['bool', 'bool'], out: 'result', outType: 'bool', content: 'Logical AND' },
+    ]
+    
+    // Process builtins
     builtins.forEach((b) => {
       // Add to available blocks for search
       const template = {
@@ -1123,6 +1220,59 @@ const Variables = {
 
       container.appendChild(el)
     })
+
+    // Process operators separately
+    const operatorsContainer = qs('#operators-list')
+    if (operatorsContainer) {
+      operators.forEach((b) => {
+        // Add to available blocks for search
+        const template = {
+          id: b.fn || b.name,
+          button_class: b.cls,
+          content: b.content,
+          has_input_executor: false,
+          has_output_executor: false,
+          exec_input_nodes: [],
+          exec_output_nodes: [],
+          variables_input_nodes: b.inputs || [],
+          variables_input_nodes_types: b.inputTypes || [],
+          variables_output_nodes: b.out ? [b.out] : [],
+          variables_output_nodes_types: b.outType ? [b.outType] : [],
+          function_name: b.fn
+        }
+        
+        Store.availableBlocks.set(b.fn || b.name, {
+          id: b.fn || b.name,
+          name: b.name,
+          type: b.cls.toLowerCase(),
+          description: b.content,
+          template: template
+        })
+        
+        const el = document.createElement('button')
+        el.type = 'button'
+        el.className = 'pal-item ' + b.cls.toLowerCase()
+        el.textContent = b.name
+        el.addEventListener('click', () => {
+          const view = window.BlockFactory.createFromTemplate(b.cls, template)
+          view.el.style.left = Math.round(Math.random() * 400 + 40) + 'px'
+          view.el.style.top = Math.round(Math.random() * 300 + 40) + 'px'
+          content.appendChild(view.el)
+          addBlockToStore(view.data.uid, view.el, view.data)
+          wireBlockEvents(view.el, canvas)
+        })
+
+        // Add drag and drop functionality
+        el.draggable = true
+        el.addEventListener('dragstart', (ev) => {
+          try { 
+            ev.dataTransfer.setData('application/x-block-template', JSON.stringify(template)) 
+          } catch (_) {}
+        })
+
+        operatorsContainer.appendChild(el)
+      })
+    }
   }
 
   function ensureBeginPlay(canvas, content) {
@@ -1186,6 +1336,72 @@ const Variables = {
     canvas.addEventListener('pointerup', () => cancelConnection())
     canvas.addEventListener('pointerleave', () => cancelConnection())
     
+    // Area selection variables
+    let isAreaSelecting = false
+    let areaSelectionStart = null
+    
+    // Area selection with Ctrl+drag
+    canvas.addEventListener('pointerdown', (e) => {
+      // Only handle left mouse button on canvas background
+      if (e.button !== 0 || (e.target !== canvas && e.target.id !== 'canvas-content')) return
+      
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        
+        isAreaSelecting = true
+        const canvasRect = canvas.getBoundingClientRect()
+        const canvasContent = qs('#canvas-content')
+        const transform = getTransform(canvasContent)
+        
+        // Convert screen coordinates to canvas coordinates
+        const canvasX = (e.clientX - canvasRect.left - transform.x) / transform.scale
+        const canvasY = (e.clientY - canvasRect.top - transform.y) / transform.scale
+        
+        areaSelectionStart = { x: canvasX, y: canvasY }
+        Store.selectionBox = { startX: canvasX, startY: canvasY, endX: canvasX, endY: canvasY }
+        
+        canvas.setPointerCapture(e.pointerId)
+      } else {
+        // Clear selection if clicking on empty canvas without Ctrl
+        clearSelection()
+      }
+    })
+    
+    canvas.addEventListener('pointermove', (e) => {
+      if (!isAreaSelecting || !areaSelectionStart) return
+      
+      const canvasRect = canvas.getBoundingClientRect()
+      const canvasContent = qs('#canvas-content')
+      const transform = getTransform(canvasContent)
+      
+      // Convert screen coordinates to canvas coordinates
+      const canvasX = (e.clientX - canvasRect.left - transform.x) / transform.scale
+      const canvasY = (e.clientY - canvasRect.top - transform.y) / transform.scale
+      
+      Store.selectionBox.endX = canvasX
+      Store.selectionBox.endY = canvasY
+      
+      // Update visual selection box
+      updateSelectionBox(Store.selectionBox)
+      
+      // Update block selection based on area
+      updateAreaSelection()
+    })
+    
+    canvas.addEventListener('pointerup', (e) => {
+      if (isAreaSelecting) {
+        isAreaSelecting = false
+        areaSelectionStart = null
+        
+        // Hide selection box
+        updateSelectionBox(null)
+        Store.selectionBox = null
+        
+        try { canvas.releasePointerCapture(e.pointerId) } catch (_) {}
+      }
+    })
+    
     // Right-click context menu
     canvas.addEventListener('contextmenu', (e) => {
       e.preventDefault()
@@ -1204,6 +1420,20 @@ const Variables = {
         return
       }
     })
+  }
+  
+  function updateAreaSelection() {
+    if (!Store.selectionBox) return
+    
+    // Clear current selection
+    clearSelection()
+    
+    // Check each block to see if it's in the selection area
+    for (const [uid, blockInfo] of Store.blocks) {
+      if (blockInfo.el && isBlockInSelectionBox(blockInfo.el, Store.selectionBox)) {
+        selectBlock(uid, true)
+      }
+    }
   }
 
   // Context menu functionality
