@@ -16,8 +16,13 @@ import indexer as ix  # type: ignore
 
 def discover_modules(modules_dir: Path) -> Dict[str, Any]:
     results: List[Dict[str, Any]] = []
-    for py in sorted(modules_dir.glob("*.py")):
-        if py.name.startswith("_") or py.name == "__init__.py":
+    # Recurse through modules directory to include subpackages (e.g., custom_functions)
+    for py in sorted(modules_dir.rglob("*.py")):
+        # Skip caches and package initializers
+        if "__pycache__" in py.parts or py.name == "__init__.py":
+            continue
+        # Optionally skip private files starting with underscore
+        if py.name.startswith("_"):
             continue
         try:
             rep = ix.index_file(py)
@@ -28,8 +33,12 @@ def discover_modules(modules_dir: Path) -> Dict[str, Any]:
                 "functions": []
             })
             continue
-        # compute import-like module name relative to modules dir
-        mod_name = py.stem
+        # Compute dotted module path relative to modules_dir, e.g., "custom_functions.my_func"
+        try:
+            rel = py.relative_to(modules_dir)
+            mod_name = ".".join(rel.with_suffix("").parts)
+        except Exception:
+            mod_name = py.stem
         for fn in rep.get("functions", []):
             fn_copy = dict(fn)
             fn_copy["module_file"] = str(py)

@@ -228,6 +228,11 @@ if __name__ == "__main__":
                 # Fallback to operator module
                 imports.add("import operator")
                 call = f"operator.{op_name}({args})"
+        elif isinstance(fn, str) and fn.startswith('custom_functions.'):
+            # Handle custom function blocks
+            _, _, name = fn.rpartition('.')
+            imports.add(f"from modules.custom_functions.{name} import {name}")
+            call = f"{name}({args})"
         elif isinstance(fn, str) and '.' in fn and not fn.startswith('builtins.'):
             mod, _, name = fn.rpartition('.')
             imports.add(f"from modules.{mod} import {name}")

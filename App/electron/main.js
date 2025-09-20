@@ -215,4 +215,55 @@ ipcMain.handle('modules:listFunctions', async () => {
   });
 });
 
+// Create custom function stub
+ipcMain.handle('backend:createCustomFunction', async (_event, customBlock) => {
+  return new Promise((resolve) => {
+    try {
+      const script = path.join(__dirname, '..', 'create_custom_function.py');
+      const cwd = path.join(__dirname, '..');
+      const payload = JSON.stringify(customBlock);
+      const condaExe = process.env.CONDA_EXE || 'conda';
+      
+      let py = spawn(condaExe, ['run', '-n', 'RemainderV0', 'python', script, payload], { cwd });
+      let out = '';
+      let err = '';
+      
+      py.stdout.on('data', (d) => { out += d.toString(); });
+      py.stderr.on('data', (d) => { err += d.toString(); });
+      
+      const finish = (code) => {
+        resolve({ code, stdout: out.trim(), stderr: err.trim() });
+      };
+      
+      py.on('close', (code) => {
+        if (code !== 0 && (err.includes('CommandNotFoundError') || err.includes('CondaEnvironmentNotFoundError') || err.includes('conda: command not found'))) {
+          // Fallback to system python
+          out = '';
+          err = '';
+          py = spawn('python3', [script, payload], { cwd });
+          py.stdout.on('data', (d) => { out += d.toString(); });
+          py.stderr.on('data', (d) => { err += d.toString(); });
+          py.on('close', finish);
+          py.on('error', () => finish(-1));
+          return;
+        }
+        finish(code);
+      });
+      
+      py.on('error', (e) => {
+        // Try fallback
+        out = '';
+        err = String(e && e.message || e);
+        const py2 = spawn('python3', [script, payload], { cwd });
+        py2.stdout.on('data', (d) => { out += d.toString(); });
+        py2.stderr.on('data', (d) => { err += d.toString(); });
+        py2.on('close', finish);
+        py2.on('error', () => finish(-1));
+      });
+    } catch (e) {
+      resolve({ code: -1, stdout: '', stderr: String(e && e.message || e) });
+    }
+  });
+});
+
 

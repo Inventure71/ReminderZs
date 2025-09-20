@@ -22,6 +22,10 @@ const Variables = {
   list: [], // { name, type, value, uid, is_global?, global_id?, local_id? }
 }
 
+const CustomBlocks = {
+  list: [], // { name, description, instructions, inputs, outputs, created, uid }
+}
+
   function addBlockToStore(uid, el, data) {
     Store.blocks.set(uid, { uid, id: data.id, el, data })
   }
@@ -334,7 +338,8 @@ const Variables = {
         variables_output_references: [],
         function_name: data.function_name || null,
         extra_context_string: data.extra_context_string || null,
-        inline_values: data.inline_values || {}
+        inline_values: data.inline_values || {},
+        custom_block_info: data.custom_block_info || null
       }
 
       // Exec linked list references
@@ -473,6 +478,8 @@ const Variables = {
     const addVarBtn = qs('#add-var')
     const saveBtn = qs('#save-project')
     const loadBtn = qs('#load-project')
+    const addCustomBlockBtn = qs('#add-custom-block')
+    const customBlocksList = qs('#custom-blocks-list')
     const inspector = qs('#inspector')
     const inspectorContent = qs('#inspector-content')
     
@@ -615,13 +622,16 @@ const Variables = {
     // Discovered modules
     if (window.blocksApi && typeof window.blocksApi.listFunctions === 'function') {
       window.blocksApi.listFunctions().then((fns) => {
-        (fns || []).slice(0, 100).forEach((fn) => {
-          const inputs = (fn.inputs || []).filter(p => !['vararg','varkw'].includes(p.kind)).map(p => p.name)
-          const inputTypes = (fn.inputs || []).filter(p => !['vararg','varkw'].includes(p.kind)).map(p => p.annotation || 'any')
+        (fns || []).slice(0, 200).forEach((fn) => {
+          const paramList = (fn.inputs || []).filter(p => !['vararg','varkw'].includes(p.kind))
+          const inputs = paramList.map(p => p.name)
+          const inputTypes = paramList.map(p => p.annotation || 'any')
           const outName = 'result'
           const outType = fn.output || 'any'
-          
-          // Add to available blocks for search
+
+          const isCustom = String(fn.module_name || '').split('.')[0] === 'custom_functions'
+
+          // Prepare common template
           const template = {
             id: `${fn.module_name}.${fn.name}`,
             button_class: 'Function',
@@ -634,39 +644,66 @@ const Variables = {
             variables_output_nodes_types: [outType],
             function_name: `${fn.module_name}.${fn.name}`
           }
-          
-          Store.availableBlocks.set(`${fn.module_name}.${fn.name}`, {
-            id: `${fn.module_name}.${fn.name}`,
-            name: `${fn.module_name}.${fn.name}`,
-            type: 'function',
-            description: fn.docstring || 'Function block',
-            template: template
-          })
-          
-          const el = document.createElement('button')
-          el.type = 'button'
-          el.className = 'pal-item function'
-          el.textContent = `${fn.module_name}.${fn.name}`
-          el.title = (fn.docstring || '')
-          el.addEventListener('click', () => {
-            const view = window.BlockFactory.createFromTemplate('Function', template)
-            view.el.style.left = Math.round(Math.random() * 400 + 40) + 'px'
-            view.el.style.top = Math.round(Math.random() * 300 + 40) + 'px'
-            content.appendChild(view.el)
-            addBlockToStore(view.data.uid, view.el, view.data)
-            wireBlockEvents(view.el, canvas)
-          })
 
-          // Add drag and drop functionality
-          el.draggable = true
-          el.addEventListener('dragstart', (ev) => {
-            try { 
-              ev.dataTransfer.setData('application/x-block-template', JSON.stringify(template)) 
-            } catch (_) {}
-          })
+          if (isCustom) {
+            // Normalize into CustomBlocks palette instead of Discovered list to keep UI consistent
+            const nameOnly = fn.name
+            if (!CustomBlocks.list.some(cb => cb.name === nameOnly)) {
+              CustomBlocks.list.push({
+                name: nameOnly,
+                description: fn.docstring || 'Custom function',
+                instructions: '',
+                inputs: inputs.map((n, i) => ({ name: n, type: inputTypes[i] || 'any' })),
+                outputs: outName ? [{ name: outName, type: outType || 'any' }] : [],
+                created: new Date().toISOString(),
+                uid: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : ('custom-' + Math.random().toString(36).slice(2))
+              })
+            }
+            // Add to search as custom_function type
+            Store.availableBlocks.set(`${fn.module_name}.${fn.name}`, {
+              id: `${fn.module_name}.${fn.name}`,
+              name: `custom_functions.${nameOnly}`,
+              type: 'custom_function',
+              description: fn.docstring || 'Custom function',
+              template: Object.assign({}, template, { content: nameOnly })
+            })
+          } else {
+            // Regular discovered function
+            Store.availableBlocks.set(`${fn.module_name}.${fn.name}`, {
+              id: `${fn.module_name}.${fn.name}`,
+              name: `${fn.module_name}.${fn.name}`,
+              type: 'function',
+              description: fn.docstring || 'Function block',
+              template: template
+            })
 
-          discoveredList.appendChild(el)
+            const el = document.createElement('button')
+            el.type = 'button'
+            el.className = 'pal-item function'
+            el.textContent = `${fn.module_name}.${fn.name}`
+            el.title = (fn.docstring || '')
+            el.addEventListener('click', () => {
+              const view = window.BlockFactory.createFromTemplate('Function', template)
+              view.el.style.left = Math.round(Math.random() * 400 + 40) + 'px'
+              view.el.style.top = Math.round(Math.random() * 300 + 40) + 'px'
+              content.appendChild(view.el)
+              addBlockToStore(view.data.uid, view.el, view.data)
+              wireBlockEvents(view.el, canvas)
+            })
+
+            // Add drag and drop functionality
+            el.draggable = true
+            el.addEventListener('dragstart', (ev) => {
+              try { 
+                ev.dataTransfer.setData('application/x-block-template', JSON.stringify(template)) 
+              } catch (_) {}
+            })
+
+            discoveredList.appendChild(el)
+          }
         })
+        // Render/refresh custom palette if we populated it from discovery
+        renderCustomBlocks()
       })
     }
 
@@ -1053,6 +1090,194 @@ const Variables = {
       renderVariables()
     })
 
+    // Custom Block Management
+    function renderCustomBlocks() {
+      customBlocksList.innerHTML = ''
+      CustomBlocks.list.forEach(customBlock => {
+        const el = document.createElement('button')
+        el.className = 'pal-item function'
+        el.textContent = customBlock.name
+        el.title = customBlock.description || 'Custom function'
+        // Build a reusable template for click or drag-create
+        const template = {
+          id: `custom_functions.${customBlock.name}`,
+          button_class: 'Function',
+          content: customBlock.name,
+          has_input_executor: true,
+          has_output_executor: true,
+          variables_input_nodes: (customBlock.inputs || []).map(i => i.name),
+          variables_input_nodes_types: (customBlock.inputs || []).map(i => i.type || 'any'),
+          variables_output_nodes: (customBlock.outputs || []).map(o => o.name),
+          variables_output_nodes_types: (customBlock.outputs || []).map(o => o.type || 'any'),
+          function_name: `custom_functions.${customBlock.name}`,
+          custom_block_info: customBlock
+        }
+
+        el.addEventListener('click', () => {
+          const view = BlockFactory.createFromTemplate('Function', template)
+          // Place near top-left but not overlapping BeginPlay
+          view.el.style.left = Math.round(Math.random() * 400 + 80) + 'px'
+          view.el.style.top = Math.round(Math.random() * 300 + 80) + 'px'
+          content.appendChild(view.el)
+          addBlockToStore(view.data.uid, view.el, view.data)
+          wireBlockEvents(view.el, canvas)
+        })
+
+        // Enable drag-and-drop creation from palette
+        el.draggable = true
+        el.addEventListener('dragstart', (ev) => {
+          try {
+            ev.dataTransfer.setData('application/x-block-template', JSON.stringify(template))
+          } catch (_) {}
+        })
+        customBlocksList.appendChild(el)
+      })
+    }
+
+    function showCustomBlockModal() {
+      const modal = qs('#custom-block-modal')
+      const form = qs('#custom-block-form')
+      const nameInput = qs('#custom-block-name')
+      const descriptionInput = qs('#custom-block-description')
+      const instructionsInput = qs('#custom-block-instructions')
+      const inputsList = qs('#custom-block-inputs')
+      const outputsList = qs('#custom-block-outputs')
+      
+      // Reset form
+      form.reset()
+      inputsList.innerHTML = ''
+      outputsList.innerHTML = ''
+      
+      // Show modal
+      modal.style.display = 'flex'
+      nameInput.focus()
+      
+      // Add parameter functions
+      function addParameter(container, type) {
+        const paramItem = document.createElement('div')
+        paramItem.className = 'param-item'
+        paramItem.innerHTML = `
+          <input type="text" placeholder="Parameter name" required>
+          <select>
+            <option value="any">any</option>
+            <option value="str">str</option>
+            <option value="int">int</option>
+            <option value="float">float</option>
+            <option value="bool">bool</option>
+          </select>
+          <button type="button" class="param-remove-btn">×</button>
+        `
+        
+        const removeBtn = paramItem.querySelector('.param-remove-btn')
+        removeBtn.addEventListener('click', () => {
+          paramItem.remove()
+        })
+        
+        container.appendChild(paramItem)
+        paramItem.querySelector('input').focus()
+      }
+      
+      // Add input/output buttons
+      qs('#add-custom-input').addEventListener('click', () => addParameter(inputsList, 'input'))
+      qs('#add-custom-output').addEventListener('click', () => addParameter(outputsList, 'output'))
+      
+      // Form submission
+      form.addEventListener('submit', (e) => {
+        e.preventDefault()
+        
+        const name = nameInput.value.trim()
+        const description = descriptionInput.value.trim()
+        const instructions = instructionsInput.value.trim()
+        
+        // Validate function name
+        if (!name || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+          alert('Function name must be a valid Python identifier')
+          nameInput.focus()
+          return
+        }
+        
+        // Check for duplicate names
+        if (CustomBlocks.list.some(cb => cb.name === name)) {
+          alert('A custom function with this name already exists')
+          nameInput.focus()
+          return
+        }
+        
+        // Collect inputs and outputs
+        const inputs = Array.from(inputsList.querySelectorAll('.param-item')).map(item => ({
+          name: item.querySelector('input').value.trim(),
+          type: item.querySelector('select').value
+        })).filter(param => param.name)
+        
+        const outputs = Array.from(outputsList.querySelectorAll('.param-item')).map(item => ({
+          name: item.querySelector('input').value.trim(),
+          type: item.querySelector('select').value
+        })).filter(param => param.name)
+        
+        // Create custom block
+        const customBlock = {
+          name,
+          description,
+          instructions,
+          inputs,
+          outputs,
+          created: new Date().toISOString(),
+          uid: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : ('custom-' + Math.random().toString(36).slice(2))
+        }
+        
+        CustomBlocks.list.push(customBlock)
+        
+        // Add to available blocks for search
+        const template = {
+          id: `custom_functions.${name}`,
+          button_class: 'Function',
+          content: name,
+          has_input_executor: true,
+          has_output_executor: true,
+          variables_input_nodes: inputs.map(i => i.name),
+          variables_input_nodes_types: inputs.map(i => i.type),
+          variables_output_nodes: outputs.map(o => o.name),
+          variables_output_nodes_types: outputs.map(o => o.type),
+          function_name: `custom_functions.${name}`,
+          custom_block_info: customBlock
+        }
+        
+        Store.availableBlocks.set(`custom_functions.${name}`, {
+          id: `custom_functions.${name}`,
+          name: `custom_functions.${name}`,
+          type: 'custom_function',
+          description: description || 'Custom function',
+          template: template
+        })
+        
+        renderCustomBlocks()
+        modal.style.display = 'none'
+        
+        // Generate Python stub
+        if (window.blocksApi && window.blocksApi.backend && typeof window.blocksApi.backend.createCustomFunction === 'function') {
+          window.blocksApi.backend.createCustomFunction(customBlock).catch(err => {
+            console.error('Failed to create Python stub:', err)
+          })
+        }
+      })
+      
+      // Close modal handlers
+      function closeModal() {
+        modal.style.display = 'none'
+        // Remove event listeners to prevent memory leaks
+        const newForm = form.cloneNode(true)
+        form.parentNode.replaceChild(newForm, form)
+      }
+      
+      qs('#custom-block-modal-close').addEventListener('click', closeModal)
+      qs('#cancel-custom-block').addEventListener('click', closeModal)
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal()
+      })
+    }
+
+    addCustomBlockBtn.addEventListener('click', showCustomBlockModal)
+
     // Save/Load project
     function serializeProject() {
       // We want raw graph, not filtered by BeginPlay; reconstruct from Store
@@ -1081,6 +1306,7 @@ const Variables = {
           function_name: data.function_name || null,
           extra_context_string: data.extra_context_string || null,
           inline_values: data.inline_values || {},
+          custom_block_info: data.custom_block_info || null,
           position: undefined
         }
         // position
@@ -1139,7 +1365,7 @@ const Variables = {
         }
         all.push(py)
       })
-      return { blocks: all, variables: Array.from(Store.variables.values()) }
+      return { blocks: all, variables: Array.from(Store.variables.values()), customBlocks: CustomBlocks.list.slice() }
     }
 
     saveBtn.addEventListener('click', async () => {
@@ -1183,6 +1409,80 @@ const Variables = {
       Variables.list = Array.isArray(res.data.variables) ? res.data.variables.slice() : []
       Variables.list.forEach((v) => { if (v && v.uid) Store.variables.set(v.uid, v) })
       renderVariables() // This will also call updateAvailableVariableBlocks()
+      
+      // Restore custom blocks and merge with discovered ones on disk
+      const savedCustomBlocks = Array.isArray(res.data.customBlocks) ? res.data.customBlocks.slice() : []
+
+      // Build merged map by name (prefer saved metadata)
+      const mergedByName = new Map()
+      const addToMerged = (cb) => {
+        if (!cb || !cb.name) return
+        const name = cb.name
+        const norm = {
+          name,
+          description: cb.description || '',
+          instructions: cb.instructions || '',
+          inputs: Array.isArray(cb.inputs) ? cb.inputs.map(i => ({ name: i.name, type: i.type || 'any' })) : [],
+          outputs: Array.isArray(cb.outputs) ? cb.outputs.map(o => ({ name: o.name, type: o.type || 'any' })) : [],
+          created: cb.created || new Date().toISOString(),
+          uid: cb.uid || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : ('custom-' + Math.random().toString(36).slice(2)))
+        }
+        mergedByName.set(name, norm)
+      }
+
+      savedCustomBlocks.forEach(addToMerged)
+
+      // Also merge discovered functions from modules/custom_functions
+      try {
+        if (window.blocksApi && typeof window.blocksApi.listFunctions === 'function') {
+          const fns = await window.blocksApi.listFunctions()
+          ;(fns || []).forEach((fn) => {
+            const isCustom = String(fn.module_name || '').split('.')[0] === 'custom_functions'
+            if (!isCustom) return
+            const nameOnly = fn.name
+            if (!mergedByName.has(nameOnly)) {
+              const paramList = (fn.inputs || []).filter(p => !['vararg','varkw'].includes(p.kind))
+              const inputs = paramList.map(p => ({ name: p.name, type: p.annotation || 'any' }))
+              const outputs = fn.output ? [{ name: 'result', type: fn.output || 'any' }] : []
+              addToMerged({
+                name: nameOnly,
+                description: fn.docstring || 'Custom function',
+                instructions: '',
+                inputs,
+                outputs
+              })
+            }
+          })
+        }
+      } catch (_) {}
+
+      CustomBlocks.list = Array.from(mergedByName.values())
+
+      // Re-add to available blocks for search
+      CustomBlocks.list.forEach((customBlock) => {
+        const template = {
+          id: `custom_functions.${customBlock.name}`,
+          button_class: 'Function',
+          content: customBlock.name,
+          has_input_executor: true,
+          has_output_executor: true,
+          variables_input_nodes: customBlock.inputs.map(i => i.name),
+          variables_input_nodes_types: customBlock.inputs.map(i => i.type),
+          variables_output_nodes: customBlock.outputs.map(o => o.name),
+          variables_output_nodes_types: customBlock.outputs.map(o => o.type),
+          function_name: `custom_functions.${customBlock.name}`,
+          custom_block_info: customBlock
+        }
+
+        Store.availableBlocks.set(`custom_functions.${customBlock.name}`, {
+          id: `custom_functions.${customBlock.name}`,
+          name: `custom_functions.${customBlock.name}`,
+          type: 'custom_function',
+          description: customBlock.description || 'Custom function',
+          template: template
+        })
+      })
+      renderCustomBlocks()
       // Recreate blocks
       const byUid = new Map()
       ;(res.data.blocks || []).forEach((b) => {

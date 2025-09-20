@@ -43,7 +43,9 @@
         // variable-specific (for Variable blocks): single UID for output variable
         variable_uid: d.variable_uid || null,
         // Inline values for unconnected input ports (indexed by port index)
-        inline_values: d.inline_values || {}
+        inline_values: d.inline_values || {},
+        // Custom block metadata (for custom function blocks)
+        custom_block_info: d.custom_block_info || null
       }
     }
 

@@ -27,6 +27,9 @@
             <div id="operators-list" class="palette"></div>
             <h3>Discovered from /modules</h3>
             <div id="discovered-list" class="palette"></div>
+            <h3>Custom Functions</h3>
+            <div id="custom-blocks-list" class="palette"></div>
+            <button id="add-custom-block" type="button" class="add-custom-btn">+ Create Custom Function</button>
             <h2>Variables</h2>
             <div id="variables-list" class="vars-list"></div>
             <div class="row">
@@ -80,6 +83,52 @@
           <div id="debug-script" class="debug-panel">
             <pre id="generated-script" class="generated-script">No script generated yet.</pre>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Block Creation Modal -->
+    <div id="custom-block-modal" class="modal" style="display: none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Create Custom Function</h3>
+          <button id="custom-block-modal-close" class="modal-close-btn">×</button>
+        </div>
+        <div class="modal-body">
+          <form id="custom-block-form">
+            <div class="form-group">
+              <label for="custom-block-name">Function Name *</label>
+              <input type="text" id="custom-block-name" placeholder="my_function" required>
+              <small>Must be a valid Python identifier</small>
+            </div>
+            
+            <div class="form-group">
+              <label for="custom-block-description">Description</label>
+              <textarea id="custom-block-description" placeholder="What does this function do?" rows="2"></textarea>
+            </div>
+            
+            <div class="form-group">
+              <label for="custom-block-instructions">Implementation Instructions</label>
+              <textarea id="custom-block-instructions" placeholder="Detailed instructions for how to implement this function..." rows="3"></textarea>
+            </div>
+            
+            <div class="form-section">
+              <h4>Inputs</h4>
+              <div id="custom-block-inputs" class="param-list"></div>
+              <button type="button" id="add-custom-input" class="add-param-btn">+ Add Input</button>
+            </div>
+            
+            <div class="form-section">
+              <h4>Outputs</h4>
+              <div id="custom-block-outputs" class="param-list"></div>
+              <button type="button" id="add-custom-output" class="add-param-btn">+ Add Output</button>
+            </div>
+            
+            <div class="modal-actions">
+              <button type="button" id="cancel-custom-block" class="btn-secondary">Cancel</button>
+              <button type="submit" class="btn-primary">Create Function</button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

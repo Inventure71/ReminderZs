@@ -30,6 +30,14 @@ contextBridge.exposeInMainWorld('blocksApi', {
     },
     loadProject: async () => {
       try { return await ipcRenderer.invoke('project:load') } catch (e) { return { ok: false, error: String(e) } }
+    },
+    createCustomFunction: async (customBlock) => {
+      try {
+        return await ipcRenderer.invoke('backend:createCustomFunction', customBlock)
+      } catch (err) {
+        console.error('backend:createCustomFunction failed', err)
+        return { code: -1, stdout: '', stderr: String(err && err.message || err) }
+      }
     }
   },
   onCreated: (callback) => {
