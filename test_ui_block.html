@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test UI Block</title>
+    <style>
+        :root{ --bg:#0f1115; --panel:#161925; --border:#2a2f45; --text:#e6e8ee; --muted:#9aa2b1; --accent:#7aa2f7; --green:#8bd5ca; --yellow:#eed49f; --purple:#c6a0f6; --red:#f28fad }
+        body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Inter, Arial, sans-serif; padding: 20px; }
+        
+        /* UI Block Styles */
+        .ui-block{
+          min-width: 440px !important;
+          max-width: 480px !important;
+        }
+
+        .ui-block-body{
+          display: flex !important;
+          flex-direction: column !important;
+          padding: 14px !important;
+          gap: 12px !important;
+        }
+
+        .ui-drawing-canvas{
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: #0a0c10;
+          cursor: crosshair;
+          display: block;
+          margin: 8px 0;
+          box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .ui-tools{
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px;
+          background: rgba(0,0,0,0.2);
+          border-radius: 6px;
+          border: 1px solid var(--border);
+          flex-wrap: wrap;
+        }
+
+        .ui-tool-btn{
+          padding: 6px 10px;
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          background: var(--panel);
+          color: var(--text);
+          cursor: pointer;
+          font-size: 14px;
+          transition: all 0.15s ease;
+        }
+
+        .ui-tool-btn:hover{
+          background: rgba(122,162,247,0.1);
+          border-color: var(--accent);
+        }
+
+        .ui-tool-btn.active{
+          background: rgba(122,162,247,0.2);
+          border-color: var(--accent);
+          color: var(--accent);
+        }
+
+        .block{ 
+            position: relative; 
+            min-width: 240px; 
+            max-width: 480px; 
+            background: linear-gradient(135deg, #111524 0%, #0f1419 100%); 
+            border: 1px solid var(--border); 
+            border-radius: 12px; 
+            box-shadow: 0 6px 20px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3); 
+            user-select: none; 
+            backdrop-filter: blur(8px); 
+            margin: 20px;
+        }
+
+        .block-header{ 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            padding: 12px 14px; 
+            border-bottom: 1px solid rgba(42,47,69,0.6); 
+            gap: 10px; 
+            background: rgba(255,255,255,0.02);
+        }
+
+        .block-title{ font-weight: 600; font-size: 14px; color: var(--text); }
+        .block-right{ display: flex; gap: 8px; align-items: center; }
+        .badge{ font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+        .badge.ui{ color: #fff; background: linear-gradient(45deg, #c6a0f6, #b088e8); box-shadow: 0 2px 8px rgba(198,160,246,0.3); }
+        .block-uid{ font-size: 10px; color: var(--muted); font-family: ui-monospace, monospace; }
+    </style>
+</head>
+<body>
+    <h1>UI Block Test</h1>
+    <div id="test-container"></div>
+
+    <script src="App/renderer/components/UIDrawingCanvas.js"></script>
+    <script src="App/renderer/components/UIBlock.js"></script>
+    <script src="App/renderer/modules/blocks/registry.js"></script>
+    <script src="App/renderer/modules/blocks/factory.js"></script>
+    
+    <script>
+        // Test the UI block creation
+        console.log('Testing UI Block creation...');
+        
+        // Wait for everything to load
+        setTimeout(() => {
+            console.log('UIDrawingCanvas available:', !!window.UIDrawingCanvas);
+            console.log('UIBlock available:', !!window.UIBlock);
+            console.log('BlockRegistry available:', !!window.BlockRegistry);
+            console.log('BlockFactory available:', !!window.BlockFactory);
+            
+            if (window.UIBlock) {
+                try {
+                    // Create a UI block directly
+                    const uiBlock = new window.UIBlock({
+                        id: 'UI',
+                        content: 'UI Designer Test',
+                        button_class: 'UI'
+                    });
+                    
+                    console.log('UI Block created:', uiBlock);
+                    console.log('UI Block element:', uiBlock.el);
+                    
+                    // Add it to the page
+                    const container = document.getElementById('test-container');
+                    container.appendChild(uiBlock.el);
+                    
+                    console.log('UI Block added to page');
+                } catch (error) {
+                    console.error('Error creating UI Block:', error);
+                }
+            } else {
+                console.error('UIBlock class not available');
+            }
+        }, 500);
+    </script>
+</body>
+</html>
+
+

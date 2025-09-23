@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Create custom function stub files for ReminderZs custom blocks.
+Create custom function stub files for projectLoom custom blocks.
 This script receives a custom block definition via JSON and creates
 a Python function stub in the modules/custom_functions/ directory.
 """

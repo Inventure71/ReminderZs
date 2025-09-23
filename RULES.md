@@ -1,4 +1,4 @@
-## ReminderZs – Project Rules and Data Contracts
+## projectLoom – Project Rules and Data Contracts
 
 This document captures the standards we agreed on for the Electron UI, block model, Python bridge, and code generation pipeline.
 

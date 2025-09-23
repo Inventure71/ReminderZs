@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Drawing Canvas</title>
+    <style>
+        :root{ --bg:#0f1115; --panel:#161925; --border:#2a2f45; --text:#e6e8ee; --muted:#9aa2b1; --accent:#7aa2f7; --green:#8bd5ca; --yellow:#eed49f; --purple:#c6a0f6; --red:#f28fad }
+        body { 
+            margin: 0; 
+            background: var(--bg); 
+            color: var(--text); 
+            font: 14px/1.4 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Inter, Arial, sans-serif; 
+            padding: 20px; 
+        }
+        
+        .test-container {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .ui-drawing-canvas {
+            border: 2px solid var(--accent) !important;
+            border-radius: 8px !important;
+            background: #0a0c10 !important;
+            cursor: crosshair !important;
+            display: block !important;
+            margin: 8px 0 !important;
+        }
+    </style>
+</head>
+<body>
+    <h1>Drawing Canvas Test</h1>
+    
+    <div class="test-container">
+        <h3>Test 1: Direct Canvas Creation</h3>
+        <p>This should show a drawing canvas that you can draw on:</p>
+        <div id="canvas-container-1"></div>
+    </div>
+    
+    <div class="test-container">
+        <h3>Test 2: Manual Canvas Element</h3>
+        <p>This is a manual HTML5 canvas for comparison:</p>
+        <canvas id="manual-canvas" width="400" height="300" style="border: 2px solid var(--green); background: #0a0c10; cursor: crosshair;"></canvas>
+    </div>
+    
+    <div class="test-container">
+        <h3>Console Output:</h3>
+        <div id="console-output" style="background: #000; color: #0f0; padding: 10px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto;"></div>
+    </div>
+
+    <script src="App/renderer/components/UIDrawingCanvas.js"></script>
+    
+    <script>
+        // Capture console output
+        const originalConsoleLog = console.log;
+        const consoleOutput = document.getElementById('console-output');
+        
+        console.log = function(...args) {
+            originalConsoleLog.apply(console, args);
+            const message = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+            ).join(' ');
+            consoleOutput.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        };
+        
+        console.log('=== Starting Drawing Canvas Tests ===');
+        
+        // Test 1: Create UIDrawingCanvas
+        setTimeout(() => {
+            console.log('UIDrawingCanvas available:', !!window.UIDrawingCanvas);
+            
+            if (window.UIDrawingCanvas) {
+                try {
+                    console.log('Creating UIDrawingCanvas instance...');
+                    const drawingCanvas = new window.UIDrawingCanvas(400, 300);
+                    console.log('UIDrawingCanvas created:', drawingCanvas);
+                    
+                    const canvasElement = drawingCanvas.getElement();
+                    console.log('Canvas element:', canvasElement);
+                    console.log('Canvas dimensions:', canvasElement.width, 'x', canvasElement.height);
+                    console.log('Canvas style:', canvasElement.style.cssText);
+                    
+                    // Add to container
+                    const container = document.getElementById('canvas-container-1');
+                    container.appendChild(canvasElement);
+                    
+                    console.log('Canvas added to DOM');
+                    
+                    // Test drawing programmatically
+                    setTimeout(() => {
+                        console.log('Testing programmatic drawing...');
+                        const ctx = canvasElement.getContext('2d');
+                        ctx.strokeStyle = '#7aa2f7';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(50, 50);
+                        ctx.lineTo(150, 100);
+                        ctx.lineTo(100, 150);
+                        ctx.stroke();
+                        console.log('Test drawing complete');
+                    }, 100);
+                    
+                } catch (error) {
+                    console.log('Error creating UIDrawingCanvas:', error);
+                }
+            } else {
+                console.log('UIDrawingCanvas not available');
+            }
+        }, 100);
+        
+        // Test 2: Manual canvas setup
+        setTimeout(() => {
+            console.log('Setting up manual canvas...');
+            const manualCanvas = document.getElementById('manual-canvas');
+            const ctx = manualCanvas.getContext('2d');
+            
+            let isDrawing = false;
+            
+            manualCanvas.addEventListener('pointerdown', (e) => {
+                console.log('Manual canvas: pointer down at', e.offsetX, e.offsetY);
+                isDrawing = true;
+                ctx.beginPath();
+                ctx.moveTo(e.offsetX, e.offsetY);
+            });
+            
+            manualCanvas.addEventListener('pointermove', (e) => {
+                if (!isDrawing) return;
+                console.log('Manual canvas: drawing to', e.offsetX, e.offsetY);
+                ctx.strokeStyle = '#8bd5ca';
+                ctx.lineWidth = 3;
+                ctx.lineTo(e.offsetX, e.offsetY);
+                ctx.stroke();
+            });
+            
+            manualCanvas.addEventListener('pointerup', () => {
+                console.log('Manual canvas: pointer up');
+                isDrawing = false;
+            });
+            
+            console.log('Manual canvas setup complete');
+        }, 200);
+    </script>
+</body>
+</html>
+
+

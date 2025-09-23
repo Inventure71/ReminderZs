@@ -138,6 +138,37 @@ if __name__ == "__main__":
             return f"bool({expr})"
         return expr
 
+    def handle_ui_block(block: Dict[str, Any]) -> Optional[str]:
+        """Handle UI blocks and generate UI code"""
+        # Get the generated UI code from inline values
+        inline_values = block.get('inline_values') or {}
+        ui_code = inline_values.get('0', '')
+        
+        if not ui_code or ui_code.strip() == '':
+            ui_code = "# No UI components drawn\npass"
+        
+        # Determine outputs
+        outs = block.get('variables_output_nodes') or []
+        out_syms: List[str] = []
+        for i, name in enumerate(outs):
+            base = sanitize_ident(name or f"ui_out{i+1}")
+            sym = base
+            j = 2
+            while sym in used_symbols:
+                sym = f"{base}_{j}"
+                j += 1
+            used_symbols.add(sym)
+            out_syms.append(sym)
+            produced_values[(block.get('uid') or '', i)] = sym
+
+        if not out_syms:
+            # If no outputs, just emit the UI code as comments
+            return f"# UI Block - Generated Code:\n{ui_code}"
+        
+        # Assign the UI code as a string to the output variable
+        ui_code_escaped = repr(ui_code)
+        return f"{out_syms[0]} = {ui_code_escaped}"
+
     def resolve_input_expr(block: Dict[str, Any], idx: int) -> str:
         # Enforced ordering from UI: one entry per input, either variable UID, "fromUid:out:index", or null
         refs = block.get('variables_input_references') or []
@@ -175,8 +206,12 @@ if __name__ == "__main__":
         Returns the code line or None if not applicable.
         """
         cls = (block.get('button_class') or '').lower()
-        if cls not in ['function', 'operator']:
+        if cls not in ['function', 'operator', 'ui']:
             return None
+        
+        # Handle UI blocks specially
+        if cls == 'ui':
+            return handle_ui_block(block)
         fn = block.get('function_name')
         # Build argument list from input variables (attempt basic casting for variables to expected input types)
         inputs = block.get('variables_input_nodes') or []

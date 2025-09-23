@@ -1584,6 +1584,7 @@ const CustomBlocks = {
       { name: 'Add', cls: 'Function', fn: 'math_add', inputs: ['a','b'], inputTypes: ['number','number'], out: 'sum', outType: 'number', content: 'Add two numbers' },
       { name: 'Max', cls: 'Function', fn: 'math_max', inputs: ['a','b'], inputTypes: ['number','number'], out: 'max', outType: 'number', content: 'Max of two' },
       { name: 'If', cls: 'Conditional', fn: 'flow_if', inputs: ['condition'], inputTypes: ['bool'], out: null, outType: null, content: 'If condition' },
+      { name: 'UI Designer', cls: 'UI', fn: null, inputs: [], inputTypes: [], out: 'ui_code', outType: 'str', content: 'Draw UI components' },
     ]
 
     const operators = [

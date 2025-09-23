@@ -90,6 +90,18 @@
       variables_output_nodes: ['result'],
       variables_output_nodes_types: ['any']
     })
+
+    registerTemplate('UI', {
+      content: 'UI Designer - Draw UI components',
+      has_input_executor: true,
+      has_output_executor: true,
+      exec_input_nodes: ['in'],
+      exec_output_nodes: ['out'],
+      variables_input_nodes: [],
+      variables_input_nodes_types: [],
+      variables_output_nodes: ['ui_code'],
+      variables_output_nodes_types: ['str']
+    })
   }
 
   registerDefaults()

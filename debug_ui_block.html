@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug UI Block</title>
+    <style>
+        :root{ --bg:#0f1115; --panel:#161925; --border:#2a2f45; --text:#e6e8ee; --muted:#9aa2b1; --accent:#7aa2f7; --green:#8bd5ca; --yellow:#eed49f; --purple:#c6a0f6; --red:#f28fad }
+        body { 
+            margin: 0; 
+            background: var(--bg); 
+            color: var(--text); 
+            font: 14px/1.4 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Inter, Arial, sans-serif; 
+            padding: 20px; 
+        }
+        
+        .debug-info {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 20px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .block{ 
+            position: relative; 
+            min-width: 240px; 
+            background: linear-gradient(135deg, #111524 0%, #0f1419 100%); 
+            border: 1px solid var(--border); 
+            border-radius: 12px; 
+            box-shadow: 0 6px 20px rgba(0,0,0,0.5); 
+            user-select: none; 
+            backdrop-filter: blur(8px); 
+            margin: 20px;
+        }
+
+        .block-header{ 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            padding: 12px 14px; 
+            border-bottom: 1px solid rgba(42,47,69,0.6); 
+            gap: 10px; 
+            background: rgba(255,255,255,0.02);
+        }
+
+        .block-title{ font-weight: 600; font-size: 14px; color: var(--text); }
+        .block-right{ display: flex; gap: 8px; align-items: center; }
+        .badge{ font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+        .badge.ui{ color: #fff; background: linear-gradient(45deg, #c6a0f6, #b088e8); box-shadow: 0 2px 8px rgba(198,160,246,0.3); }
+        .block-uid{ font-size: 10px; color: var(--muted); font-family: ui-monospace, monospace; }
+        
+        .block-body {
+            padding: 14px;
+        }
+        
+        .ui-canvas-placeholder {
+            width: 400px; 
+            height: 300px; 
+            border: 2px solid var(--accent); 
+            border-radius: 8px; 
+            background: #0a0c10; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            color: var(--text); 
+            font-size: 16px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Debug UI Block Rendering</h1>
+    
+    <div class="debug-info" id="debug-info">
+        <div>Loading debug information...</div>
+    </div>
+    
+    <div id="test-container"></div>
+
+    <script>
+        // Create a minimal UI block manually to see what's happening
+        function createMinimalUIBlock() {
+            const block = document.createElement('div');
+            block.className = 'block ui-block';
+            
+            // Header
+            const header = document.createElement('div');
+            header.className = 'block-header';
+            header.innerHTML = `
+                <div class="block-title">UI Designer (Manual)</div>
+                <div class="block-right">
+                    <span class="badge ui">UI</span>
+                    <div class="block-uid">#test123</div>
+                </div>
+            `;
+            
+            // Body
+            const body = document.createElement('div');
+            body.className = 'block-body';
+            
+            // Canvas placeholder
+            const placeholder = document.createElement('div');
+            placeholder.className = 'ui-canvas-placeholder';
+            placeholder.textContent = 'DRAWING AREA - This should be visible!';
+            
+            body.appendChild(placeholder);
+            block.appendChild(header);
+            block.appendChild(body);
+            
+            return block;
+        }
+        
+        // Update debug info
+        function updateDebugInfo() {
+            const debugEl = document.getElementById('debug-info');
+            debugEl.innerHTML = `
+                <div><strong>Debug Information:</strong></div>
+                <div>UIDrawingCanvas available: ${!!window.UIDrawingCanvas}</div>
+                <div>UIBlock available: ${!!window.UIBlock}</div>
+                <div>BlockRegistry available: ${!!window.BlockRegistry}</div>
+                <div>BlockFactory available: ${!!window.BlockFactory}</div>
+                <div>Current time: ${new Date().toLocaleTimeString()}</div>
+            `;
+        }
+        
+        // Test 1: Create a minimal UI block manually
+        console.log('=== TEST 1: Manual UI Block ===');
+        const manualBlock = createMinimalUIBlock();
+        document.getElementById('test-container').appendChild(manualBlock);
+        console.log('Manual block created and added');
+        
+        // Test 2: Try to load the actual UI components
+        console.log('=== TEST 2: Loading UI Components ===');
+        
+        // Load scripts dynamically
+        const scripts = [
+            'App/renderer/components/UIDrawingCanvas.js',
+            'App/renderer/components/UIBlock.js',
+            'App/renderer/modules/blocks/registry.js',
+            'App/renderer/modules/blocks/factory.js'
+        ];
+        
+        let loadedScripts = 0;
+        
+        scripts.forEach((src, index) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = () => {
+                loadedScripts++;
+                console.log(`Script loaded: ${src}`);
+                updateDebugInfo();
+                
+                if (loadedScripts === scripts.length) {
+                    // All scripts loaded, try to create UI block
+                    setTimeout(() => {
+                        console.log('=== TEST 3: Creating Real UI Block ===');
+                        testRealUIBlock();
+                    }, 100);
+                }
+            };
+            script.onerror = (e) => {
+                console.error(`Failed to load script: ${src}`, e);
+                updateDebugInfo();
+            };
+            document.head.appendChild(script);
+        });
+        
+        function testRealUIBlock() {
+            updateDebugInfo();
+            
+            if (window.UIBlock) {
+                try {
+                    console.log('Creating UIBlock instance...');
+                    const uiBlock = new window.UIBlock({
+                        id: 'UI',
+                        content: 'UI Designer Test',
+                        button_class: 'UI'
+                    });
+                    
+                    console.log('UIBlock created:', uiBlock);
+                    console.log('UIBlock element:', uiBlock.el);
+                    console.log('UIBlock element HTML:', uiBlock.el.outerHTML);
+                    
+                    // Add it to the page
+                    const container = document.getElementById('test-container');
+                    const separator = document.createElement('hr');
+                    separator.style.margin = '20px 0';
+                    separator.style.border = '1px solid var(--border)';
+                    container.appendChild(separator);
+                    
+                    const title = document.createElement('h3');
+                    title.textContent = 'Real UI Block:';
+                    title.style.color = 'var(--text)';
+                    container.appendChild(title);
+                    
+                    container.appendChild(uiBlock.el);
+                    
+                    console.log('Real UI Block added to page');
+                    
+                    // Check if canvas placeholder exists
+                    setTimeout(() => {
+                        const placeholder = uiBlock.el.querySelector('.ui-canvas-placeholder');
+                        console.log('Canvas placeholder found:', !!placeholder);
+                        if (placeholder) {
+                            console.log('Placeholder dimensions:', placeholder.offsetWidth, 'x', placeholder.offsetHeight);
+                            console.log('Placeholder style:', placeholder.style.cssText);
+                        }
+                        
+                        const canvas = uiBlock.el.querySelector('.ui-drawing-canvas');
+                        console.log('Actual canvas found:', !!canvas);
+                        
+                        updateDebugInfo();
+                    }, 200);
+                    
+                } catch (error) {
+                    console.error('Error creating UIBlock:', error);
+                    updateDebugInfo();
+                }
+            } else {
+                console.error('UIBlock class not available');
+                updateDebugInfo();
+            }
+        }
+        
+        // Initial debug info
+        updateDebugInfo();
+    </script>
+</body>
+</html>
+
+

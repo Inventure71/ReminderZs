@@ -1,4 +1,4 @@
-# ReminderZs – Quick Info
+# projectLoom – Quick Info
 
 This app provides a block‑based UI (Electron) with a Python backend to generate scripts.
 

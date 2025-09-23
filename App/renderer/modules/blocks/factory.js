@@ -3,6 +3,7 @@
     const base = (window.BlockRegistry && window.BlockRegistry.getTemplate(name)) || null
     if (!base) throw new Error('Unknown block template: ' + name)
     const data = Object.assign({}, base, overrides || {})
+    
     // enforce class constraints at creation time
     if ((name || '').toLowerCase() === 'variable') {
       data.has_input_executor = false
@@ -17,6 +18,17 @@
       const genUid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : ('var-' + Math.random().toString(36).slice(2)))
       if (!data.variable_uid) data.variable_uid = genUid()
     }
+    
+    // Handle UI blocks with special UIBlock class
+    if ((name || '').toLowerCase() === 'ui') {
+      console.log('[Factory] Creating UI block, UIBlock class available:', !!window.UIBlock)
+      if (window.UIBlock) {
+        return new window.UIBlock(data)
+      } else {
+        console.error('[Factory] UIBlock class not found! Falling back to BlockView')
+      }
+    }
+    
     return new window.BlockView(data)
   }
 

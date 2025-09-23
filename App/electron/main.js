@@ -60,11 +60,11 @@ ipcMain.on('blocks:create', (event, block) => {
 
 // Project save/load
 ipcMain.handle('project:save', async (_event, projectData) => {
-  const defaultPath = 'project.reminderzs.json';
+  const defaultPath = 'project.projectLoom.json';
   const { filePath, canceled } = await electron.dialog.showSaveDialog({
     title: 'Save Project',
     defaultPath,
-    filters: [{ name: 'ReminderZs Project', extensions: ['json'] }]
+    filters: [{ name: 'projectLoom Project', extensions: ['json'] }]
   });
   if (canceled || !filePath) return { ok: false };
   try {
@@ -79,7 +79,7 @@ ipcMain.handle('project:load', async () => {
   const { filePaths, canceled } = await electron.dialog.showOpenDialog({
     title: 'Open Project',
     properties: ['openFile'],
-    filters: [{ name: 'ReminderZs Project', extensions: ['json'] }]
+    filters: [{ name: 'projectLoom Project', extensions: ['json'] }]
   });
   if (canceled || !filePaths || !filePaths[0]) return { ok: false };
   try {

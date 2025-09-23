@@ -1,7 +1,7 @@
 {
-  "name": "reminderzs-ui",
+  "name": "projectLoom-ui",
   "version": "0.1.0",
-  "description": "Electron UI for ReminderZs blocks",
+  "description": "Electron UI for projectLoom blocks",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
@@ -10,7 +10,7 @@
   },
   "keywords": [
     "electron",
-    "reminderzs",
+    "projectLoom",
     "ui"
   ],
   "author": "",
